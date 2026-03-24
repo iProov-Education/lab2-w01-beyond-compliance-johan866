@@ -42,6 +42,15 @@ ISSUER_BASE_URL=http://127.0.0.1:3101 VERIFIER_BASE_URL=http://127.0.0.1:3102 pn
 - The autograder checks only the active `LAB_ID`.
 - Students do not need to finish one lab before you move them to the next.
 
+## iProov-Education rollout
+
+- Instructor repo: `https://github.com/iProov-Education/LearningLab`
+- Starter template repo: `https://github.com/iProov-Education/learninglab-starter`
+- `course-ops` config: `learninglab-world-class-implementation-kit/catalog/course.config.iproov-education.yaml`
+- Default conference assumption: keep assignment repos `public` to avoid paid private-repo collaborator seats for attendees.
+- After you create the new GitHub Classroom in the `iProov-Education` org, update your instructor-only `course-ops` env file so `GITHUB_CLASSROOM_INVITE_URL` points at the new assignment and `GITHUB_CLASSROOM_STARTER_REPO_URL` points at `https://github.com/iProov-Education/learninglab-starter`.
+- Google Classroom API limitation: `patch-google` cannot change coursework `materials`, so if the invite URL changes after publication you must edit the Google Classroom post in the UI or recreate the post.
+
 ## More detail
 
 For the full student-template-oriented GitHub Classroom setup guide, see [classroom-template/COURSE_CLASSROOM.md](classroom-template/COURSE_CLASSROOM.md).
