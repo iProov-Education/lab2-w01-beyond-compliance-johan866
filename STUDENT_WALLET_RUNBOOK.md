@@ -4,8 +4,34 @@ This is the optional mobile-wallet track for students who have already finished 
 
 Use this runbook to connect one of the external wallet forks to a reachable `LearningLab` backend.
 
+If you just want the fastest build-and-run path, start with [BUILD_THE_WALLET.md](BUILD_THE_WALLET.md).
+
 The point is not to rebuild the entire wallet.
 The point is to see the small number of patch points that add the iProov gate to an otherwise vanilla wallet.
+
+## What the clone helper actually clones
+
+`node scripts/setup-wallet-forks.js` clones the workshop forks, not the untouched upstream vanilla wallets.
+
+For this workshop, those are:
+
+- `johan-sellstrom/eudi-app-ios-wallet-ui`
+- `johan-sellstrom/eudi-app-android-wallet-ui`
+
+Those forks already contain the iProov gate code and callback handling.
+
+You are not expected to:
+
+- add the iProov SDK from scratch
+- create the gate files from scratch
+- invent the `eudi-wallet://iproov` callback flow yourself
+
+You are expected to:
+
+- clone one workshop fork
+- set the issuer and verifier values
+- run it locally
+- inspect the exact files that were changed
 
 ## Important: use your laptop, not the Codespace
 
@@ -76,13 +102,20 @@ Expected workspace layout:
 Important:
 
 - clone only the platform you need
+- the cloned repo is already the workshop fork with the iProov gate wired in
 - if the script says you are in Codespaces, stop and rerun it from your laptop terminal
 
 ## Step 3: decide which backend URL the wallet should use
 
-There is no single fixed issuer URL in the repo.
+For this workshop, use the public backend by default:
 
-Choose the issuer URL based on where the backend is running:
+- issuer: `https://issuer.ipid.me`
+- verifier API: `https://verifier.ipid.me`
+- wallet RP page: `https://verifier.ipid.me/wallet`
+
+Only switch to Codespaces or a laptop-local backend if you are intentionally testing your own instance.
+
+Other supported issuer URL choices:
 
 - Backend in Codespaces:
   - open the backend Codespace
@@ -94,11 +127,13 @@ Choose the issuer URL based on where the backend is running:
   - Android emulator: `http://10.0.2.2:3001`
   - physical device on the same Wi-Fi: `http://<your-mac-lan-ip>:3001`
 - Shared workshop backend:
-  - use the public HTTPS issuer URL the instructor gives you
+  - issuer: `https://issuer.ipid.me`
+  - verifier: `https://verifier.ipid.me`
+  - RP page: `https://verifier.ipid.me/wallet`
 
 Only use `localhost` when the issuer is running on the same laptop as the simulator.
 
-If you also need a verifier URL, use the same rule with Port `3002`.
+If you need the verifier URL directly, use the same rule with Port `3002`.
 
 ## Step 4: sanity-check the backend
 
@@ -131,6 +166,32 @@ Interpret `/iproov/config` like this:
 
 For this workshop, the real iProov credentials stay in the backend, not in the wallet repo.
 
+## Step 5: use the verifier RP page
+
+Open this page on your laptop:
+
+```text
+https://verifier.ipid.me/wallet
+```
+
+That page gives you:
+
+- the QR code to scan with the wallet
+- the exact verifier preregistration values
+- the live result page that shows whether the presentation arrived
+
+If you are testing your own backend, open that verifier's `/wallet` page instead.
+
+## Step 6: set the verifier preregistration values
+
+For this workshop, use these preregistered verifier values:
+
+- client ID: `verifier.ipid.me`
+- verifier API URI: `https://verifier.ipid.me`
+- verifier legal name: `iProov Verifier`
+
+Use those exact values in the wallet config files below.
+
 ## iOS track
 
 Wallet repo:
@@ -140,14 +201,27 @@ Wallet repo:
 Key files:
 
 - `eudi-app-ios-wallet-ui/Wallet/Wallet.plist`
+- `eudi-app-ios-wallet-ui/Modules/logic-core/Sources/Config/WalletKitConfig.swift`
 - `eudi-app-ios-wallet-ui/Modules/feature-presentation/Sources/IProov/IProovPresentationGate.swift`
 - `eudi-app-ios-wallet-ui/Modules/logic-ui/Sources/Controller/DeepLinkController.swift`
 
-If you were patching the upstream vanilla wallet, these are the exact places to change:
+The cloned workshop iOS fork already contains:
+
+- the `IProov Enabled` and `IProov Issuer Base URL` keys in `Wallet.plist`
+- `IProovPresentationGate.swift`
+- the `eudi-wallet://iproov` callback handling in `DeepLinkController.swift`
+- the iProov Swift package dependency
+
+Reference only: if you were patching the upstream vanilla wallet yourself, these are the exact places to change:
 
 - `Wallet/Wallet.plist`
   - add the `IProov Enabled` toggle
   - add the `IProov Issuer Base URL`
+- `WalletKitConfig.swift`
+  - add `.preregistered([...])` to the OpenID4VP `clientIdSchemes`
+  - use `clientId = "verifier.ipid.me"`
+  - use `verifierApiUri = "https://verifier.ipid.me"`
+  - use `verifierLegalName = "iProov Verifier"`
 - `IProovPresentationGate.swift`
   - call `/iproov/config`
   - decide whether to use the native SDK or the web fallback flow
@@ -186,6 +260,14 @@ Important:
 4. Make sure:
    - `IProov Enabled` is `true`
    - `IProov Issuer Base URL` is the exact issuer URL from Step 3
+5. Open `Modules/logic-core/Sources/Config/WalletKitConfig.swift`.
+6. Add the preregistered verifier entry with:
+   - `clientId: "verifier.ipid.me"`
+   - `verifierApiUri: "https://verifier.ipid.me"`
+   - `verifierLegalName: "iProov Verifier"`
+
+Do not create new iProov source files here.
+For the workshop fork, you are only changing configuration values and then running the app.
 
 Use these issuer URLs:
 
@@ -199,6 +281,10 @@ Use these issuer URLs:
   - paste the exact public HTTPS URL the instructor gives you
 
 Do not use `localhost` on a physical iPhone.
+
+Use this verifier page to start the presentation:
+
+- `https://verifier.ipid.me/wallet`
 
 ### iOS expected flow
 
@@ -235,12 +321,24 @@ Wallet repo:
 
 Key files:
 
+- `eudi-app-android-wallet-ui/core-logic/src/dev/java/eu/europa/ec/corelogic/config/WalletCoreConfigImpl.kt`
 - `eudi-app-android-wallet-ui/presentation-feature/build.gradle.kts`
 - `eudi-app-android-wallet-ui/presentation-feature/src/main/java/eu/europa/ec/presentationfeature/iproov/IProovPresentationGate.kt`
 - `eudi-app-android-wallet-ui/presentation-feature/src/main/java/eu/europa/ec/presentationfeature/ui/loading/PresentationLoadingViewModel.kt`
 
-If you were patching the upstream vanilla wallet, these are the exact places to change:
+The cloned workshop Android fork already contains:
 
+- `presentation-feature/.../IProovPresentationGate.kt`
+- the `eudi-wallet://iproov` callback path
+- the presentation-loading hook that pauses until the iProov step completes
+
+Reference only: if you were patching the upstream vanilla wallet yourself, these are the exact places to change:
+
+- `WalletCoreConfigImpl.kt`
+  - add `ClientIdScheme.Preregistered(...)`
+  - use `clientId = "verifier.ipid.me"`
+  - use `verifierApi = "https://verifier.ipid.me"`
+  - use `legalName = "iProov Verifier"`
 - `presentation-feature/build.gradle.kts`
   - add `IPROOV_GATE_ENABLED`
   - add `IPROOV_ISSUER_BASE_URL`
@@ -270,10 +368,18 @@ Expected callback URL:
 ### Android setup
 
 1. Open `eudi-app-android-wallet-ui` in Android Studio.
-2. Open `presentation-feature/build.gradle.kts`.
-3. Make sure:
+2. Open `core-logic/src/dev/java/eu/europa/ec/corelogic/config/WalletCoreConfigImpl.kt`.
+3. Add the preregistered verifier entry with:
+   - `clientId = "verifier.ipid.me"`
+   - `verifierApi = "https://verifier.ipid.me"`
+   - `legalName = "iProov Verifier"`
+4. Open `presentation-feature/build.gradle.kts`.
+5. Make sure:
    - `IPROOV_GATE_ENABLED` is `true`
    - `IPROOV_ISSUER_BASE_URL` is the exact issuer URL from Step 3
+
+Do not add new iProov gate code here.
+For the workshop fork, you are only setting config values and then running the app.
 
 Use these issuer URLs:
 
@@ -284,7 +390,11 @@ Use these issuer URLs:
 - physical Android device with a local backend on the same Wi-Fi:
   - `http://<your-mac-lan-ip>:3001`
 - shared public workshop backend:
-  - paste the exact public HTTPS URL the instructor gives you
+  - use `https://issuer.ipid.me`
+
+Use this verifier page to start the presentation:
+
+- `https://verifier.ipid.me/wallet`
 
 ### Android expected flow
 

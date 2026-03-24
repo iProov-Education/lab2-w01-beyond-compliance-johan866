@@ -106,6 +106,8 @@ test('formatNextSteps reminds students to use the local runbook and a reachable 
     repos: []
   })
 
+  assert.match(text, /workshop forks/i)
+  assert.match(text, /iProov gate already wired/i)
   assert.match(text, /STUDENT_WALLET_RUNBOOK\.md/)
   assert.match(text, /local LearningLab checkout/)
   assert.match(text, /do not use localhost unless the issuer is running on this same laptop/i)

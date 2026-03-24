@@ -48,9 +48,15 @@ test('build-student-template keeps student wallet docs but excludes instructor-o
 
     const walletRunbook = await fs.readFile(path.join(outDir, 'STUDENT_WALLET_RUNBOOK.md'), 'utf8')
     assert.match(walletRunbook, /node scripts\/setup-wallet-forks\.js --platform ios/)
+    assert.match(walletRunbook, /clones the workshop forks/i)
+    assert.match(walletRunbook, /not the untouched upstream vanilla wallets/i)
     assert.match(walletRunbook, /use your laptop, not the Codespace/i)
     assert.match(walletRunbook, /https:\/\/<codespace-name>-3001\.app\.github\.dev/)
     assert.doesNotMatch(walletRunbook, /\/Users\/johansellstrom\//)
+
+    const walletBuildGuide = await fs.readFile(path.join(outDir, 'BUILD_THE_WALLET.md'), 'utf8')
+    assert.match(walletBuildGuide, /johan-sellstrom\/eudi-app-ios-wallet-ui/)
+    assert.match(walletBuildGuide, /already contain the iProov presentation-gate work/i)
   } finally {
     await fs.rm(tmpRoot, { recursive: true, force: true })
   }

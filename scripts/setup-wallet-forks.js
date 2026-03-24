@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /*
- * Clone the public EUDI wallet forks beside the LearningLab repo.
+ * Clone the public workshop EUDI wallet forks beside the LearningLab repo.
  *
  * Why:
  * - The mobile wallet sources live in separate repos and should stay that way.
  * - Students should clone only the platform they need without dealing with
  *   submodules or nested git repositories inside LearningLab.
+ * - The cloned repos are already patched for the workshop iProov gate; students
+ *   should configure and run them, not add the gate from scratch.
  *
  * Usage:
  *   node scripts/setup-wallet-forks.js
@@ -36,7 +38,10 @@ const WALLET_REPOS = {
 function printUsage() {
   console.log(`setup-wallet-forks.js
 
-Clone the public EUDI wallet forks beside LearningLab.
+Clone the public workshop EUDI wallet forks beside LearningLab.
+
+These repos already contain the iProov presentation-gate wiring used in Lab 06.
+They are not the untouched upstream vanilla wallets.
 
 Options:
   --platform <ios|android|all>   Select which wallet repo(s) to clone
@@ -172,8 +177,10 @@ function formatNextSteps(plan) {
     lines.push('[wallet-setup] preview complete; rerun the same command on your laptop without --dry-run to clone the wallet repo.')
   }
 
+  lines.push('[wallet-setup] next: these are workshop forks with the iProov gate already wired, not the untouched upstream wallets')
   lines.push('[wallet-setup] next: open STUDENT_WALLET_RUNBOOK.md in your local LearningLab checkout')
   lines.push('[wallet-setup] next: open the cloned wallet repo in Xcode or Android Studio on your laptop')
+  lines.push('[wallet-setup] next: do not add the iProov SDK from scratch; only set the issuer/verifier values and run the fork')
   lines.push('[wallet-setup] next: use the issuer URL your instructor gave you, or your own local backend URL')
   lines.push('[wallet-setup] next: do not use localhost unless the issuer is running on this same laptop')
 
