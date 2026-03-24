@@ -48,6 +48,7 @@ app.get('/vp/request', (_req, res) => {
   })
 })
 
+// See labs/README-lab-01-issuance.md, labs/README-lab-02-bbs.md, labs/README-lab-03-ohttp.md, and labs/README-lab-05-revocation.md.
 app.post('/verify', (_req, res) => {
   return notImplemented(res, 'Lab 01/02/03/05: implement verification, relay usage, and revocation checks')
 })

@@ -17,7 +17,8 @@ Environment tracks
 Steps
 1) Install deps: `pnpm install -r`.
 2) Start services: `pnpm dev` (Issuer on :3001, Verifier on :3002).
-3) Hit metadata: `curl http://localhost:3001/.well-known/openid-credential-issuer` (should return issuer metadata if present; credential endpoints will be stubs).
+   - Leave this running in its own terminal.
+3) Open a second terminal for checks and hit metadata: `curl http://localhost:3001/.well-known/openid-credential-issuer` (should return issuer metadata if present; credential endpoints will be stubs).
 4) Confirm stubs return 501:  
    - `curl -i -X POST http://localhost:3001/credential-offers -d '{}' -H 'content-type: application/json'`  
    - `curl -i -X POST http://localhost:3001/token -d '{}' -H 'content-type: application/json'`  

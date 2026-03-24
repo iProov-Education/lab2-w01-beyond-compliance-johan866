@@ -43,42 +43,52 @@ app.get('/.well-known/openid-credential-issuer', (_req: Request, res: Response) 
   })
 })
 
+// See labs/README-lab-01-issuance.md for the JWKS shape expected by the verifier.
 app.get('/.well-known/jwks.json', (_req: Request, res: Response) => {
   return notImplemented(res, 'Lab 01: publish issuer signing keys')
 })
 
+// See labs/README-lab-02-bbs.md for the BBS public-key endpoint contract.
 app.get('/.well-known/bbs-public-key', (_req: Request, res: Response) => {
   return notImplemented(res, 'Lab 02: publish BBS public key')
 })
 
+// See labs/README-lab-01-issuance.md for the pre-authorized offer flow and payload.
 app.post('/credential-offers', (_req: Request, res: Response) => {
   return notImplemented(res, 'Lab 01: implement pre-authorized credential offers')
 })
 
+// See labs/README-lab-01-issuance.md for token exchange, access_token, and c_nonce behavior.
 app.post('/token', (_req: Request, res: Response) => {
   return notImplemented(res, 'Lab 01: implement token issuance for the pre-authorized flow')
 })
 
+// See labs/README-lab-01-issuance.md, labs/README-lab-02-bbs.md, labs/README-lab-04-iproov.md, and labs/README-lab-05-revocation.md.
 app.post('/credential', (_req: Request, res: Response) => {
   return notImplemented(res, 'Lab 01/02/04/05: implement issuance, gating, and status')
 })
 
+// See labs/README-lab-02-bbs.md for proof derivation inputs and expected output shape.
 app.post('/bbs/proof', (_req: Request, res: Response) => {
   return notImplemented(res, 'Lab 02: implement or expose the BBS proof helper')
 })
 
+// See labs/README-lab-04-iproov.md for claim-session creation and response shape.
 app.get('/iproov/claim', (_req: Request, res: Response) => {
   return notImplemented(res, 'Lab 04: implement iProov claim session creation')
 })
 
+// See labs/README-lab-04-iproov.md for the webhook payload and pass/fail behavior.
 app.post('/iproov/webhook', (_req: Request, res: Response) => {
   return notImplemented(res, 'Lab 04: implement iProov webhook handling')
 })
 
+// See labs/README-lab-05-revocation.md for the Bitstring Status List response format.
 app.get('/statuslist/:id.json', (_req: Request, res: Response) => {
   return notImplemented(res, 'Lab 05: serve the Bitstring Status List')
 })
 
+// See labs/README-lab-05-revocation.md for the revocation mutation and admin-token checks.
 app.post('/revoke/:id', (_req: Request, res: Response) => {
   return notImplemented(res, 'Lab 05: implement revocation')
 })

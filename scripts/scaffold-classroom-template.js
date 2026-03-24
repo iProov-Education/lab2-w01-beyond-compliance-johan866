@@ -31,6 +31,7 @@ const ROOT_EXCLUDES = new Set([
   'CONSENT_BUDGETS.md',
   'CURRENT_PLAN.md',
   'LAB_ARTIFACT_PLAN.md',
+  'LESSON_RUNBOOK.md',
   'RESUME.md',
   'SUBMISSION.md'
 ])
