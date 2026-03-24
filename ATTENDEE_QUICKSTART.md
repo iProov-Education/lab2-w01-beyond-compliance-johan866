@@ -38,6 +38,7 @@ pnpm dev
 7. Open the forwarded ports for:
    - `3001` (`Issuer`)
    - `3002` (`Verifier`)
+   - You should see small service landing pages. They confirm the servers are up; the lab itself continues in the README and lab docs.
 8. Open [labs/README-lab-00-start.md](labs/README-lab-00-start.md) and follow Lab 00.
 
 ## Alternative path: local terminal
