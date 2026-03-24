@@ -1,36 +1,120 @@
-# Lab 00 — Start (Scaffolding + Health Checks)
+# Lab 00 — Start
 
 Lab ID: `00` · Timebox: 10 minutes
 
-Goal: get the scaffold running, env files in place, and verify the expected 501 stubs before coding.
+Goal: boot the starter repo, confirm the services are alive, and confirm the unfinished endpoints still return `501`.
 
-Environment tracks
-- Codespaces
-  - Stay on `main` in your Codespace.
-  - The dev container usually already ran `pnpm env:setup` and `pnpm install -r --frozen-lockfile` for you.
-- Local terminal
-  - Stay on `main` in your local clone.
-  - Install prerequisites with the root `README.md` bootstrap steps.
-  - Run `pnpm env:setup`.
-  - Run `pnpm install -r --frozen-lockfile`.
+## What this lab is for
 
-Steps
-1) Install deps: `pnpm install -r`.
-2) Start services: `pnpm dev` (Issuer on :3001, Verifier on :3002).
-   - Leave this running in its own terminal.
-3) Open a second terminal for checks and hit metadata: `curl http://localhost:3001/.well-known/openid-credential-issuer` (should return issuer metadata if present; credential endpoints will be stubs).
-4) Confirm stubs return 501:  
-   - `curl -i -X POST http://localhost:3001/credential-offers -d '{}' -H 'content-type: application/json'`  
-   - `curl -i -X POST http://localhost:3001/token -d '{}' -H 'content-type: application/json'`  
-   - `curl -i -X POST http://localhost:3001/credential -d '{}' -H 'content-type: application/json'`  
-   - `curl -i -X POST http://localhost:3002/verify -d '{}' -H 'content-type: application/json'`
-5) Open the annotated code for reference during the lab: `issuer/src/index.ts`, `verifier/src/index.ts`, `bbs-lib/src/index.ts` (comments describe the intended flow).
+Do not build anything yet.
 
-Pass criteria
-- Servers boot without errors.
-- Credential/verify endpoints still return 501 (to be implemented in later labs).
+This lab is only a health check:
 
-Troubleshooting
-- Port in use: edit `ISSUER_PORT` / `VERIFIER_PORT` in `.env` files to avoid conflicts.
-- Node/pnpm missing: see repo `README.md` for bootstrap scripts (macOS + Windows + Codespaces).
-- If the metadata endpoint 404s, ensure the dev servers are running on `main`.
+1. start the issuer and verifier
+2. make sure the metadata page works
+3. make sure the unfinished routes still return `501`
+
+## Before you start
+
+- Stay on `main`.
+- Open two terminals.
+- Keep `pnpm dev` running in Terminal 1.
+- Use Terminal 2 for `curl` checks.
+
+If you are in Codespaces, setup is usually already done for you.
+If you are running locally and this is a fresh clone, run:
+
+```bash
+pnpm env:setup
+pnpm install -r --frozen-lockfile
+```
+
+## Terminal 1: start the services
+
+Run:
+
+```bash
+pnpm dev
+```
+
+Expected result:
+
+- issuer starts on `http://localhost:3001`
+- verifier starts on `http://localhost:3002`
+
+You can also open these in the browser:
+
+- `http://localhost:3001/`
+- `http://localhost:3002/`
+
+Those pages are only landing pages. They are not the full lab flow.
+
+## Terminal 2: run the checks
+
+### 1. Check issuer metadata
+
+Run:
+
+```bash
+curl -s http://localhost:3001/.well-known/openid-credential-issuer | jq
+```
+
+Expected result:
+
+- you get JSON back
+- it mentions `/token` and `/credential`
+
+### 2. Confirm the unfinished routes still return `501`
+
+Run:
+
+```bash
+curl -i -X POST http://localhost:3001/credential-offers \
+  -H 'content-type: application/json' \
+  -d '{}'
+```
+
+```bash
+curl -i -X POST http://localhost:3001/token \
+  -H 'content-type: application/json' \
+  -d '{}'
+```
+
+```bash
+curl -i -X POST http://localhost:3001/credential \
+  -H 'content-type: application/json' \
+  -d '{}'
+```
+
+```bash
+curl -i -X POST http://localhost:3002/verify \
+  -H 'content-type: application/json' \
+  -d '{}'
+```
+
+Expected result:
+
+- these endpoints should return `501 Not Implemented`
+- that is correct for Lab 00
+
+## Files to open
+
+Open these files so you know where later labs will happen:
+
+- `issuer/src/index.ts`
+- `verifier/src/index.ts`
+- `bbs-lib/src/index.ts`
+
+Do not worry about understanding every TODO yet.
+
+## You are done when
+
+- both servers start without crashing
+- metadata returns JSON
+- the unfinished credential and verify routes return `501`
+
+## If something fails
+
+- port already in use: change `ISSUER_PORT` or `VERIFIER_PORT` in your `.env` files
+- metadata returns `404`: make sure `pnpm dev` is still running
+- `pnpm` or Node missing locally: use the bootstrap instructions in the root `README.md`

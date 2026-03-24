@@ -40,17 +40,12 @@ Local terminal fallback:
 - Lab 03: [labs/README-lab-03-ohttp.md](labs/README-lab-03-ohttp.md)
 - Lab 04: [labs/README-lab-04-iproov.md](labs/README-lab-04-iproov.md)
 - Lab 05: [labs/README-lab-05-revocation.md](labs/README-lab-05-revocation.md)
+- Optional Lab 06: [labs/README-lab-06-mobile-wallets.md](labs/README-lab-06-mobile-wallets.md) for the laptop-only mobile wallet track
 
 ## Docs
 
 Student docs:
 
 - Quick start: [ATTENDEE_QUICKSTART.md](ATTENDEE_QUICKSTART.md)
-- Mobile wallet runbook: [STUDENT_WALLET_RUNBOOK.md](STUDENT_WALLET_RUNBOOK.md)
-- Mobile wallet repo layout: [WALLET_FORKS.md](WALLET_FORKS.md)
+- Optional mobile wallet runbook: [STUDENT_WALLET_RUNBOOK.md](STUDENT_WALLET_RUNBOOK.md) for local terminal + Xcode/Android Studio
 - Deeper technical reference: [TECHNICAL_REFERENCE.md](TECHNICAL_REFERENCE.md)
-
-Instructor and operator docs:
-
-- GitHub Classroom operations: [COURSE_CLASSROOM.md](COURSE_CLASSROOM.md)
-- Village demo conductor: [VILLAGE_DEMO_CONDUCTOR.md](VILLAGE_DEMO_CONDUCTOR.md)

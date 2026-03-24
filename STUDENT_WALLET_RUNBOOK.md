@@ -1,315 +1,320 @@
 # Student Wallet Runbook
 
-This file is the mobile-track guide for students. It is written to remove ambiguity during class.
+This is the optional mobile-wallet track for students who have already finished the core labs.
 
-Read this before opening Xcode or Android Studio:
+Use this runbook to connect one of the external wallet forks to a reachable `LearningLab` backend.
 
-- the wallet repos live outside `LearningLab`
-- the browser-based `demo-conductor` flow is not the mobile integration point
-- students should receive wallet forks where the iProov plumbing already exists
-- the classroom expectation is that students run and understand the wallet flow, not that they invent the integration from zero
+The point is not to rebuild the entire wallet.
+The point is to see the small number of patch points that add the iProov gate to an otherwise vanilla wallet.
 
-## What Students Are Expected To Do
+## Important: use your laptop, not the Codespace
 
-Students are expected to:
+This runbook is for:
 
-1. run the local `LearningLab` issuer and verifier
-2. clone exactly one wallet fork beside `LearningLab`
-3. point that wallet at the local issuer
-4. run a presentation flow and observe where iProov gates the release
-5. understand the difference between demo mode and real iProov mode
+- a local terminal on your laptop
+- Xcode or Android Studio on your laptop
+- a backend URL that your simulator, emulator, or device can reach
 
-Students are not expected to:
+This runbook is not for:
 
-- add the official iProov iOS SDK from scratch
-- design the Android gate from scratch
-- modify `demo-conductor/`
-- move the wallet source code into `LearningLab`
-- make the wallet repos submodules
+- cloning the wallet repo inside GitHub Codespaces
+- building the wallet inside GitHub Codespaces
+- pasting iProov credentials into the wallet repo
 
-## Workspace Layout
+## What runs where
 
-Use this layout:
+- Local terminal:
+  - clone your own `LearningLab` repo if needed
+  - run `node scripts/setup-wallet-forks.js --platform ios` or `--platform android`
+- Local IDE:
+  - Xcode for iOS
+  - Android Studio for Android
+- Backend:
+  - either a local `pnpm dev` on your laptop
+  - or the forwarded/public URL of a running backend elsewhere
+
+The wallet only needs a backend URL it can actually reach.
+
+## Step 1: make sure you have a local `LearningLab` checkout
+
+If you only used GitHub Codespaces so far, clone your own student repo onto your laptop first:
+
+```bash
+git clone <your-learninglab-repo-url> LearningLab
+cd LearningLab
+```
+
+If you already have a local checkout, just `cd` into it.
+
+## Step 2: clone exactly one wallet fork
+
+From the local `LearningLab` folder on your laptop, run one of these:
+
+```bash
+node scripts/setup-wallet-forks.js --platform ios
+```
+
+```bash
+node scripts/setup-wallet-forks.js --platform android
+```
+
+Preview only:
+
+```bash
+node scripts/setup-wallet-forks.js --dry-run
+```
+
+Expected workspace layout:
 
 ```text
-RSA/
+<workspace-root>/
   LearningLab/
   eudi-app-ios-wallet-ui/
   eudi-app-android-wallet-ui/
 ```
 
-From `LearningLab/`, students can clone the wallets with:
+Important:
+
+- clone only the platform you need
+- if the script says you are in Codespaces, stop and rerun it from your laptop terminal
+
+## Step 3: decide which backend URL the wallet should use
+
+There is no single fixed issuer URL in the repo.
+
+Choose the issuer URL based on where the backend is running:
+
+- Backend in Codespaces:
+  - open the backend Codespace
+  - open the `PORTS` panel
+  - copy the forwarded Port `3001` URL
+  - it will look like `https://<codespace-name>-3001.app.github.dev`
+- Backend on your laptop:
+  - iOS simulator: `http://localhost:3001`
+  - Android emulator: `http://10.0.2.2:3001`
+  - physical device on the same Wi-Fi: `http://<your-mac-lan-ip>:3001`
+- Shared workshop backend:
+  - use the public HTTPS issuer URL the instructor gives you
+
+Only use `localhost` when the issuer is running on the same laptop as the simulator.
+
+If you also need a verifier URL, use the same rule with Port `3002`.
+
+## Step 4: sanity-check the backend
+
+Before opening the wallet, make sure the issuer responds.
+
+If the backend is local:
 
 ```bash
-node scripts/setup-wallet-forks.js --platform ios
-node scripts/setup-wallet-forks.js --platform android
-```
-
-## Start the Backend First
-
-Before opening either wallet:
-
-```bash
-cd /Users/johansellstrom/dev/iproov/RSA/LearningLab
-pnpm env:setup
-pnpm install -r --frozen-lockfile
+cd LearningLab
 pnpm dev
 ```
 
-Sanity checks:
+Then check:
 
 ```bash
 curl -s http://localhost:3001/.well-known/openid-credential-issuer | jq
 curl -s http://localhost:3001/iproov/config | jq
 ```
 
-Interpret the iProov config like this:
+If the backend is in Codespaces or on a shared public URL, replace `http://localhost:3001` with the real issuer URL from Step 3.
+
+Interpret `/iproov/config` like this:
 
 - `realCeremonyEnabled=false`
   - the issuer is in demo mode
-  - the wallet should use the web callback fallback
-
+  - the wallet should use the web fallback flow
 - `realCeremonyEnabled=true`
   - the issuer has real iProov credentials
-  - iOS can use the native iProov SDK on a physical iPhone
+  - the iOS native SDK path can be used on a physical iPhone
 
-## iOS Student Instructions
+For this workshop, the real iProov credentials stay in the backend, not in the wallet repo.
 
-Repo:
-- `/Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui`
+## iOS track
+
+Wallet repo:
+
+- `<workspace-root>/eudi-app-ios-wallet-ui`
 
 Key files:
-- config keys live in [Wallet.plist](/Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui/Wallet/Wallet.plist)
-- the iProov gate logic lives in [IProovPresentationGate.swift](/Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui/Modules/feature-presentation/Sources/IProov/IProovPresentationGate.swift)
-- the callback deep link handling lives in [DeepLinkController.swift](/Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui/Modules/logic-ui/Sources/Controller/DeepLinkController.swift)
+
+- `eudi-app-ios-wallet-ui/Wallet/Wallet.plist`
+- `eudi-app-ios-wallet-ui/Modules/feature-presentation/Sources/IProov/IProovPresentationGate.swift`
+- `eudi-app-ios-wallet-ui/Modules/logic-ui/Sources/Controller/DeepLinkController.swift`
+
+If you were patching the upstream vanilla wallet, these are the exact places to change:
+
+- `Wallet/Wallet.plist`
+  - add the `IProov Enabled` toggle
+  - add the `IProov Issuer Base URL`
+- `IProovPresentationGate.swift`
+  - call `/iproov/config`
+  - decide whether to use the native SDK or the web fallback flow
+  - call `/iproov/claim` or `/iproov/mobile/claim`
+  - block the presentation flow until the session passes
+- `DeepLinkController.swift`
+  - handle the `eudi-wallet://iproov` callback
+  - resume the pending presentation flow after the browser fallback returns
 
 Important plist keys:
+
 - `IProov Enabled`
 - `IProov Issuer Base URL`
 
 Expected callback URL:
+
 - `eudi-wallet://iproov`
 
 ### iOS prerequisites
 
 - Xcode installed
-- an Apple Silicon iOS simulator for demo-mode testing
-- a physical iPhone if you want the native iProov SDK path
+- Apple Silicon simulator for demo-mode testing, or
+- physical iPhone for the native iProov SDK path
 
 Important:
+
 - use a concrete arm64 simulator destination such as `iPhone 17 Pro`
-- do not use the generic `Any iOS Simulator Device` target for this wallet fork
-- the current upstream PoDoFo dependency fails the x86_64 simulator link step, so Intel-Mac simulator builds are not the supported classroom path
+- do not use `Any iOS Simulator Device`
+- the current upstream PoDoFo dependency is not a good generic x86_64 simulator path
 
-The upstream wallet docs say the project has two schemes:
-- `EUDI Wallet Dev`
-- `EUDI Wallet Demo`
+### iOS setup
 
-### iOS exact setup
-
-1. Open `/Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui/EudiReferenceWallet.xcodeproj` in Xcode.
-2. Choose the normal development scheme you use for local runs.
-3. Choose a concrete simulator or device destination.
-4. If you are using a simulator, choose an arm64 simulator such as `iPhone 17 Pro`.
-5. Do not build against `Any iOS Simulator Device`.
-6. Open [Wallet.plist](/Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui/Wallet/Wallet.plist).
-7. Make sure:
+1. Open `eudi-app-ios-wallet-ui/EudiReferenceWallet.xcodeproj` in Xcode.
+2. Choose your normal dev scheme.
+3. Open `eudi-app-ios-wallet-ui/Wallet/Wallet.plist`.
+4. Make sure:
    - `IProov Enabled` is `true`
-   - `IProov Issuer Base URL` points at your issuer
+   - `IProov Issuer Base URL` is the exact issuer URL from Step 3
 
-CLI verification command:
+Use these issuer URLs:
 
-```bash
-xcodebuild \
-  -project /Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui/EudiReferenceWallet.xcodeproj \
-  -scheme 'EUDI Wallet Dev' \
-  -configuration 'Debug Dev' \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  build
-```
-
-Use these base URLs:
-
-- iOS simulator on the same Mac:
+- backend in Codespaces:
+  - paste the exact `https://<codespace-name>-3001.app.github.dev` URL
+- iOS simulator with a local backend on the same Mac:
   - `http://localhost:3001`
-
-- physical iPhone on the same Wi-Fi as your Mac:
+- physical iPhone with a local backend on the same Wi-Fi:
   - `http://<your-mac-lan-ip>:3001`
-  - example: `http://192.168.1.20:3001`
+- shared public workshop backend:
+  - paste the exact public HTTPS URL the instructor gives you
 
-Do not use `localhost` on a physical iPhone. On a real device, `localhost` means the phone itself, not your Mac.
+Do not use `localhost` on a physical iPhone.
 
 ### iOS expected flow
 
-When the wallet reaches the presentation loading step, the gate does this automatically:
+When the wallet reaches the presentation loading step:
 
-1. `GET /iproov/config`
-2. If the issuer says real iProov is enabled and the app is on a physical iPhone:
-   - `GET /iproov/claim`
-   - launch the official iProov iOS SDK
-   - `POST /iproov/validate`
-3. Otherwise:
-   - `POST /iproov/mobile/claim`
-   - open the returned `launchUrl`
-   - wait for the callback to `eudi-wallet://iproov`
-   - `GET /iproov/session/:session`
-4. Only then continue the normal presentation send
-
-### iOS what students should test
-
-Demo-mode test:
-
-1. Leave the issuer in demo mode.
-2. Run the wallet in the simulator.
-3. Trigger a presentation so the wallet reaches the loading screen.
-4. Confirm the app opens the issuer-hosted web fallback.
-5. Complete the demo ceremony.
-6. Confirm the app returns through `eudi-wallet://iproov`.
-7. Confirm the presentation resumes only after the session reports `passed=true`.
-
-Real-iProov test:
-
-1. Configure real iProov credentials on the issuer.
-2. Run the wallet on a physical iPhone.
-3. Trigger the same presentation flow.
-4. Confirm the native iProov SDK opens.
-5. Confirm the app calls `/iproov/validate` after the SDK reports success.
-6. Confirm the presentation resumes only after validation passes.
+1. it checks `/iproov/config`
+2. if real iProov is enabled and the app is on a physical device:
+   - it calls `/iproov/claim`
+   - it launches the native iProov SDK
+   - it calls `/iproov/validate`
+3. otherwise:
+   - it calls `/iproov/mobile/claim`
+   - it opens the returned `launchUrl`
+   - it waits for the `eudi-wallet://iproov` callback
+   - it checks `/iproov/session/:session`
+4. only then does it continue the presentation flow
 
 ### iOS troubleshooting
 
-- "iProov is enabled, but the wallet callback or issuer URL is not configured."
-  - fix [Wallet.plist](/Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui/Wallet/Wallet.plist)
+- build fails on generic simulator target:
+  - switch to a concrete arm64 simulator or use a physical iPhone
+- app never returns from web fallback:
+  - check the callback URL in `Wallet.plist`
+  - check `DeepLinkController.swift`
+- phone or simulator cannot reach the issuer:
+  - make sure `IProov Issuer Base URL` matches the actual backend location
+  - do not use `localhost` unless the issuer is local on the same Mac
 
-- "Real iProov on iOS requires a physical device."
-  - switch the issuer back to demo mode or run on a real iPhone
+## Android track
 
-- the Xcode build fails on `Any iOS Simulator Device` or with `_OBJC_CLASS_$_PodofoWrapper` for `x86_64`
-  - switch to a concrete arm64 simulator such as `iPhone 17 Pro`
-  - or use a physical iPhone
-  - do not treat that failure as an iProov bug; it is the current upstream PoDoFo simulator limitation
+Wallet repo:
 
-- the wallet never returns from the web fallback
-  - confirm the callback URL is still `eudi-wallet://iproov`
-  - confirm [DeepLinkController.swift](/Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui/Modules/logic-ui/Sources/Controller/DeepLinkController.swift) still handles the `iproov` host
-
-- the real device cannot reach the issuer
-  - use your Mac's LAN IP, not `localhost`
-  - make sure the phone and Mac are on the same network
-
-## Android Student Instructions
-
-Repo:
-- `/Users/johansellstrom/dev/iproov/RSA/eudi-app-android-wallet-ui`
+- `<workspace-root>/eudi-app-android-wallet-ui`
 
 Key files:
-- build-time config lives in [presentation-feature/build.gradle.kts](/Users/johansellstrom/dev/iproov/RSA/eudi-app-android-wallet-ui/presentation-feature/build.gradle.kts)
-- the Android iProov gate lives in [IProovPresentationGate.kt](/Users/johansellstrom/dev/iproov/RSA/eudi-app-android-wallet-ui/presentation-feature/src/main/java/eu/europa/ec/presentationfeature/iproov/IProovPresentationGate.kt)
-- the presentation loading hook lives in [PresentationLoadingViewModel.kt](/Users/johansellstrom/dev/iproov/RSA/eudi-app-android-wallet-ui/presentation-feature/src/main/java/eu/europa/ec/presentationfeature/ui/loading/PresentationLoadingViewModel.kt)
 
-Important BuildConfig fields:
+- `eudi-app-android-wallet-ui/presentation-feature/build.gradle.kts`
+- `eudi-app-android-wallet-ui/presentation-feature/src/main/java/eu/europa/ec/presentationfeature/iproov/IProovPresentationGate.kt`
+- `eudi-app-android-wallet-ui/presentation-feature/src/main/java/eu/europa/ec/presentationfeature/ui/loading/PresentationLoadingViewModel.kt`
+
+If you were patching the upstream vanilla wallet, these are the exact places to change:
+
+- `presentation-feature/build.gradle.kts`
+  - add `IPROOV_GATE_ENABLED`
+  - add `IPROOV_ISSUER_BASE_URL`
+- `IProovPresentationGate.kt`
+  - call `/iproov/config`
+  - request `/iproov/mobile/claim`
+  - open the returned browser URL
+  - wait for the callback and session status before continuing
+- `PresentationLoadingViewModel.kt`
+  - call the iProov gate before `sendRequestedDocuments()`
+  - resume the normal presentation flow only after the gate returns success
+
+Important build config fields:
+
 - `IPROOV_GATE_ENABLED`
 - `IPROOV_ISSUER_BASE_URL`
 
 Expected callback URL:
+
 - `eudi-wallet://iproov`
 
 ### Android prerequisites
 
-- Android Studio installed
-- either an Android emulator or a physical Android device
+- Android Studio
+- emulator or physical Android device
 
-The upstream wallet docs describe these common build variants:
-- `devDebug`
-- `devRelease`
-- `demoDebug`
-- `demoRelease`
+### Android setup
 
-### Android exact setup
-
-1. Open `/Users/johansellstrom/dev/iproov/RSA/eudi-app-android-wallet-ui` in Android Studio.
-2. Open [presentation-feature/build.gradle.kts](/Users/johansellstrom/dev/iproov/RSA/eudi-app-android-wallet-ui/presentation-feature/build.gradle.kts).
+1. Open `eudi-app-android-wallet-ui` in Android Studio.
+2. Open `presentation-feature/build.gradle.kts`.
 3. Make sure:
    - `IPROOV_GATE_ENABLED` is `true`
-   - `IPROOV_ISSUER_BASE_URL` points at your issuer
+   - `IPROOV_ISSUER_BASE_URL` is the exact issuer URL from Step 3
 
-Use these base URLs:
+Use these issuer URLs:
 
-- Android emulator:
+- backend in Codespaces:
+  - paste the exact `https://<codespace-name>-3001.app.github.dev` URL
+- Android emulator with a local backend:
   - `http://10.0.2.2:3001`
-
-- physical Android device:
+- physical Android device with a local backend on the same Wi-Fi:
   - `http://<your-mac-lan-ip>:3001`
-
-The default checked-in Android setting already uses `http://10.0.2.2:3001` for emulator work.
+- shared public workshop backend:
+  - paste the exact public HTTPS URL the instructor gives you
 
 ### Android expected flow
 
-The current Android fork uses the web-based mobile fallback path, not the native iProov Android SDK.
+The current Android fork uses the web-based mobile fallback path.
 
-When the wallet reaches the presentation loading step, the gate does this automatically:
+When the wallet reaches the presentation loading step:
 
-1. `POST /iproov/mobile/claim`
-2. receive a `launchUrl`
-3. open that URL in the browser
-4. wait for the callback to `eudi-wallet://iproov`
-5. `GET /iproov/session/:session`
-6. only then continue `sendRequestedDocuments()`
-
-### Android what students should test
-
-1. Run the issuer and verifier locally.
-2. Run the Android wallet in the emulator.
-3. Trigger a presentation until the loading screen appears.
-4. Confirm the wallet opens the issuer-hosted iProov web page.
-5. Complete the demo ceremony.
-6. Confirm the app returns through `eudi-wallet://iproov`.
-7. Confirm the presentation resumes only after the session status endpoint reports success.
+1. it calls `/iproov/mobile/claim`
+2. it receives a `launchUrl`
+3. it opens that URL in the browser
+4. it waits for the `eudi-wallet://iproov` callback
+5. it checks `/iproov/session/:session`
+6. only then does it continue `sendRequestedDocuments()`
 
 ### Android troubleshooting
 
-- "IProov is enabled, but IPROOV_ISSUER_BASE_URL is empty."
-  - fix [presentation-feature/build.gradle.kts](/Users/johansellstrom/dev/iproov/RSA/eudi-app-android-wallet-ui/presentation-feature/build.gradle.kts)
-
-- the emulator cannot reach the issuer
-  - use `10.0.2.2`, not `localhost`
-
-- the app never resumes after browser fallback
-  - confirm the deep link scheme is still `eudi-wallet`
-  - confirm the callback host is still `iproov`
-
-- the gate opens but the session never passes
-  - check the issuer logs
+- emulator cannot reach the issuer:
+  - use `10.0.2.2` only for a local backend on your laptop
+  - use the public or Codespaces HTTPS URL for remote backends
+- app never resumes after browser fallback:
+  - check the deep link scheme and callback host
+- session never passes:
+  - inspect issuer logs
   - check `GET /iproov/session/:session`
-  - make sure the demo page actually posted success back to the issuer
 
-## What The Wallet Files Mean
+## Instructor short answers
 
-Students will often ask which files are "configuration" and which files are "behavior". Use this split:
-
-- configuration
-  - iOS: [Wallet.plist](/Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui/Wallet/Wallet.plist)
-  - Android: [presentation-feature/build.gradle.kts](/Users/johansellstrom/dev/iproov/RSA/eudi-app-android-wallet-ui/presentation-feature/build.gradle.kts)
-
-- gate behavior
-  - iOS: [IProovPresentationGate.swift](/Users/johansellstrom/dev/iproov/RSA/eudi-app-ios-wallet-ui/Modules/feature-presentation/Sources/IProov/IProovPresentationGate.swift)
-  - Android: [IProovPresentationGate.kt](/Users/johansellstrom/dev/iproov/RSA/eudi-app-android-wallet-ui/presentation-feature/src/main/java/eu/europa/ec/presentationfeature/iproov/IProovPresentationGate.kt)
-
-- the point where the normal presentation flow is paused
-  - iOS: the iProov gate runs before the wallet sends the presentation response
-  - Android: the iProov gate runs before `sendRequestedDocuments()`
-
-## Instructor Short Answers
-
-- "Do students need the wallet to pass Labs 00 to 05?"
-  - No. The wallet is the advanced/mobile track.
-
-- "Should students build iProov integration from scratch?"
-  - No. They should receive a fork with the gate already wired.
-
-- "Which platform is better for live class use?"
-  - iOS is the best path for native iProov on a real device.
-  - Android is currently the additive web-fallback path.
-
-- "Should students change `demo-conductor` to make the wallet work?"
-  - No. The booth demo path must stay separate and unchanged.
+- "Do students need the wallet to pass Labs 00-05?"
+  - No. This is the optional advanced track.
+- "Should students build the wallet iProov integration from scratch?"
+  - No. They should receive wallet forks with the gate already wired.
+- "Where do students clone the wallets?"
+  - From a local terminal inside their local `LearningLab` checkout, using `node scripts/setup-wallet-forks.js`.

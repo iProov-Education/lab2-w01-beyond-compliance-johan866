@@ -2,46 +2,152 @@
 
 Lab ID: `04` · Timebox: 20 minutes
 
-Goal: require a successful iProov verification before releasing/presenting credentials.
+Goal: do not issue or accept the protected credential flow until an iProov session has passed.
 
-Environment tracks
-- Codespaces
-  - Stay on `main` in your Codespace.
-  - Your `.env` files and dependencies should already be ready from setup.
-- Local terminal
-  - Stay on `main` in your local clone.
-  - If you are starting fresh, run `pnpm env:setup` and `pnpm install -r --frozen-lockfile`.
+## What this lab is really about
 
-Additional setup
-- iProov sandbox credentials available (use placeholders if demoing).
-- Set `IPROOV_BASE_URL`, `IPROOV_API_KEY`, `IPROOV_MANAGEMENT_KEY`, and `IPROOV_PASS_TOKEN` in `issuer/.env` for local demo work.
+The main idea is simple:
 
-Steps (edit + test)
-1) Add claim + webhook endpoints
-   - In `issuer/src/index.ts`, implement `/iproov/claim` to request/return a token or streaming URL from iProov (mock acceptable for lab; return a signed token or placeholder).
-   - Implement `/iproov/webhook`: accept callbacks from iProov, validate a shared secret or header, and persist the result (e.g., in-memory map keyed by session or subject) with `signals.matching.passed`.
-2) Gate credential issuance/presentation
-   - In `/credential` (or before presentation release), check the stored iProov result; if not passed, respond 403 with `requires_liveness`.
-   - On success, proceed with issuance/presentation as in earlier labs.
-3) Wallet hook (Swift)
-   - In `wallet-ios/README.md` (or Swift patch files), add the snippet:
-     ```
-     IProov.launch(streamingURL: URL(string: claim.streamingURL)!, token: claim.token) { event in
-       switch event { case .success(_): onResult(true); case .failure(_): onResult(false); default: break }
-     }
-     ```
-   - Ensure the wallet calls `runIProov` before sending the presentation/credential request.
-4) Run and test
-   - Start services: `pnpm dev`.
-   - Request an iProov token: `curl -s http://localhost:3001/iproov/claim | jq`.
-   - Simulate webhook pass: `curl -s -X POST http://localhost:3001/iproov/webhook -H 'content-type: application/json' -d '{"session":"<id>","signals":{"matching":{"passed":true}}}'`.
-   - Attempt issuance/presentation; expect success only after webhook marks the session passed.
+1. create an iProov session
+2. remember that session in memory
+3. mark it passed when the webhook says it passed
+4. block the protected flow until that session is marked passed
 
-Pass criteria
-- Issuance/presentation is blocked until the webhook indicates `passed=true`.
-- After a successful webhook call, the same flow succeeds without other code changes.
+For the workshop, a simple in-memory map is enough.
+You do not need a full production integration.
 
-Troubleshooting
-- 403 `requires_liveness`: ensure the webhook payload sets `passed=true` for the correct session/subject.
-- Token retrieval errors: verify `IPROOV_*` env vars and that your mock/real iProov API call returns a usable token/URL.
-- Webhook validation: if using a secret, confirm headers match between iProov and your handler. 
+## Before you start
+
+- Finish Labs 01 and 02 first.
+- Keep `pnpm dev` running.
+- This workshop uses a Codespaces-only setup for Lab 04.
+
+For students in Codespaces:
+
+- the instructor has already provided the required iProov credentials
+- you do not need to edit `issuer/.env`
+- you do not need to paste any iProov secret into the repo
+
+For this workshop, treat the Codespace as the only supported path for the real iProov flow.
+If you are working outside Codespaces, use the demo-mode webhook path unless the instructor has explicitly given you a separate local setup.
+
+## Files you will edit
+
+- `issuer/src/index.ts`
+- If you continue into Optional Lab 06 later, the wallet-specific code lives in the separate iOS or Android wallet repo, not inside `LearningLab`.
+
+## Part 1: create a session endpoint
+
+### 1. Implement `GET /iproov/claim`
+
+In plain English:
+
+- create a session id
+- store it in memory with `passed: false`
+- return enough data for the client to start the ceremony
+
+For demo mode, returning a simple session object is fine.
+
+The response should include at least:
+
+- `session`
+- `mode`
+- `token`
+- `streamingURL`
+
+## Part 2: accept the webhook result
+
+### 2. Implement `POST /iproov/webhook`
+
+In plain English:
+
+- read the incoming session id
+- read whether the result passed or failed
+- update the stored session state
+
+The most important field is:
+
+```json
+{ "signals": { "matching": { "passed": true } } }
+```
+
+After this webhook runs, your in-memory session map should know whether that session passed.
+
+## Part 3: block the protected flow until liveness passes
+
+### 3. Add the gate
+
+Pick the place this lab should protect in your current flow.
+
+For the workshop repo, that is usually:
+
+- before issuing the protected credential, or
+- before verifying the protected BBS disclosure flow
+
+The behavior should be:
+
+- no session or failed session -> return `403`
+- passed session -> continue normally
+
+## Part 4: optional wallet hook
+
+If you continue into Optional Lab 06, the external wallet fork should:
+
+1. call `/iproov/claim`
+2. launch the iProov SDK
+3. continue only after success
+
+The minimal Swift shape is:
+
+```swift
+IProov.launch(streamingURL: URL(string: claim.streamingURL)!, token: claim.token) { event in
+  switch event {
+  case .success(_): onResult(true)
+  case .failure(_): onResult(false)
+  default: break
+  }
+}
+```
+
+## Part 5: smoke test
+
+### 1. Create an iProov session
+
+```bash
+curl -s http://localhost:3001/iproov/claim | jq
+```
+
+Copy the `session`.
+
+### 2. Try the protected flow before the webhook
+
+Attempt the protected credential or disclosure step you are gating.
+
+Expected result:
+
+- it should fail with `403`
+
+### 3. Simulate a passed webhook
+
+```bash
+curl -s -X POST http://localhost:3001/iproov/webhook \
+  -H 'content-type: application/json' \
+  -d '{"session":"<session>","signals":{"matching":{"passed":true}}}' | jq
+```
+
+### 4. Retry the protected flow
+
+Expected result:
+
+- it now succeeds without other code changes
+
+## You are done when
+
+- the protected flow is blocked before the webhook
+- the same flow succeeds after the webhook marks the session passed
+
+## If something fails
+
+- still getting `403`: check that you used the same session id in the webhook and in the protected flow
+- session not found: make sure `/iproov/claim` stored it in memory
+- real iProov setup failing: use the demo webhook path first, then come back to the real integration

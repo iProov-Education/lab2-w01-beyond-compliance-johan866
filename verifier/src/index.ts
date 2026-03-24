@@ -6,6 +6,11 @@ import { randomBytes } from 'node:crypto'
 
 dotenv.config()
 
+// Student setup hint:
+// - Lab 01 usually adds jose imports for JWT verification plus helpers for disclosure hashing.
+// - You will also want somewhere to cache the issuer JWKS and store the last verified result.
+// - Later labs extend this same file with BBS verification, relay fetches, and revocation checks.
+
 const app = express()
 app.use(cors())
 app.use(express.json({ limit: '1mb' }))
@@ -48,7 +53,12 @@ app.get('/vp/request', (_req, res) => {
   })
 })
 
-// See labs/README-lab-01-issuance.md, labs/README-lab-02-bbs.md, labs/README-lab-03-ohttp.md, and labs/README-lab-05-revocation.md.
+// Lab 01 hint: split SD-JWT credentials into the signed JWT and disclosures, verify the JWT,
+// then rebuild the disclosed claims.
+// Lab 02 adds the BBS proof-verification branch.
+// Lab 03 routes outbound fetches through the relay when OHTTP is on.
+// Lab 05 checks credentialStatus against the published status list.
+// See the lab README files for the current lesson's exact flow.
 app.post('/verify', (_req, res) => {
   return notImplemented(res, 'Lab 01/02/03/05: implement verification, relay usage, and revocation checks')
 })

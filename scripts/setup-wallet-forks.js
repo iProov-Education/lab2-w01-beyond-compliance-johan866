@@ -11,6 +11,7 @@
  *   node scripts/setup-wallet-forks.js
  *   node scripts/setup-wallet-forks.js --platform ios
  *   node scripts/setup-wallet-forks.js --dir ../wallets --dry-run
+ *   node scripts/setup-wallet-forks.js --platform ios --allow-codespaces
  */
 
 const fs = require('node:fs')
@@ -42,6 +43,7 @@ Options:
   --dir <path>                   Target root for the sibling clones
   --protocol <https|ssh>         Clone protocol (default: https)
   --dry-run                      Print the clone plan without running git
+  --allow-codespaces             Override the local-terminal guard
   -h, --help                     Show this message`)
 }
 
@@ -64,6 +66,7 @@ function parseArgs(argv) {
     dir: null,
     protocol: 'https',
     dryRun: false,
+    allowCodespaces: false,
     help: false
   }
 
@@ -71,6 +74,7 @@ function parseArgs(argv) {
     const arg = argv[i]
     if (arg === '--help' || arg === '-h') out.help = true
     else if (arg === '--dry-run') out.dryRun = true
+    else if (arg === '--allow-codespaces') out.allowCodespaces = true
     else if (arg === '--platform') out.platform = normalizePlatform(argv[++i])
     else if (arg.startsWith('--platform=')) out.platform = normalizePlatform(arg.split('=')[1])
     else if (arg === '--dir') out.dir = argv[++i]
@@ -81,6 +85,19 @@ function parseArgs(argv) {
   }
 
   return out
+}
+
+function isCodespacesEnvironment(env = process.env) {
+  return String(env.CODESPACES || '').trim().toLowerCase() === 'true' || Boolean(env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN)
+}
+
+function assertLocalTerminalEnvironment(options = {}, env = process.env) {
+  if (options.allowCodespaces || !isCodespacesEnvironment(env)) return
+  throw new Error(
+    'Run this script from a local terminal on your laptop, not inside GitHub Codespaces. ' +
+      'Clone your LearningLab student repo locally, then rerun this command there. ' +
+      'The mobile wallet repos need local Xcode or Android Studio.'
+  )
 }
 
 function resolveTargetRoot(dir, repoRoot = ROOT) {
@@ -148,16 +165,34 @@ function runClonePlan(plan, spawnImpl = spawnSync) {
   }
 }
 
-function main(argv = process.argv.slice(2)) {
+function formatNextSteps(plan) {
+  const lines = []
+
+  if (plan.dryRun) {
+    lines.push('[wallet-setup] preview complete; rerun the same command on your laptop without --dry-run to clone the wallet repo.')
+  }
+
+  lines.push('[wallet-setup] next: open STUDENT_WALLET_RUNBOOK.md in your local LearningLab checkout')
+  lines.push('[wallet-setup] next: open the cloned wallet repo in Xcode or Android Studio on your laptop')
+  lines.push('[wallet-setup] next: use the issuer URL your instructor gave you, or your own local backend URL')
+  lines.push('[wallet-setup] next: do not use localhost unless the issuer is running on this same laptop')
+
+  return lines.join('\n')
+}
+
+function main(argv = process.argv.slice(2), env = process.env) {
   const args = parseArgs(argv)
   if (args.help) {
     printUsage()
     return
   }
 
+  assertLocalTerminalEnvironment(args, env)
+
   const plan = createClonePlan(args)
   console.log(formatClonePlan(plan))
   runClonePlan(plan)
+  console.log(formatNextSteps(plan))
 }
 
 if (require.main === module) {
@@ -174,10 +209,13 @@ module.exports = {
   createClonePlan,
   formatClonePlan,
   main,
+  assertLocalTerminalEnvironment,
   normalizePlatform,
   normalizeProtocol,
   parseArgs,
   resolveTargetRoot,
   runClonePlan,
-  selectWalletRepos
+  selectWalletRepos,
+  formatNextSteps,
+  isCodespacesEnvironment
 }
