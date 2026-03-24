@@ -28,6 +28,8 @@ Your repo and coding environment come from GitHub Classroom and GitHub Codespace
 pnpm dev
 ```
 
+Keep that terminal running. Open a second Codespaces terminal for any `curl` commands from the labs.
+
 If you see `tsx: not found` or `node_modules missing`, run:
 
 ```bash
@@ -39,6 +41,7 @@ pnpm dev
    - `3001` (`Issuer`)
    - `3002` (`Verifier`)
    - You should see small service landing pages. They confirm the servers are up; the lab itself continues in the README and lab docs.
+   - If the external `https://...app.github.dev/` page looks stale, use the `http://localhost:3001` or `http://localhost:3002` link from the Codespaces terminal instead and keep going.
 8. Open [labs/README-lab-00-start.md](labs/README-lab-00-start.md) and follow Lab 00.
 
 ## Alternative path: local terminal
@@ -85,6 +88,8 @@ pnpm dev
 - Bring a facilitator your repo URL and the exact terminal error.
 - If GitHub shows `Repository Access Issue`, accept the pending repository invitation first.
 - If `pnpm dev` fails with `tsx: not found`, run `pnpm install -r --frozen-lockfile && pnpm env:setup` once, then retry.
+- If the lab asks for `curl` while `pnpm dev` is already running, open a second terminal instead of stopping the dev servers.
+- If the forwarded `app.github.dev` page looks out of date but `http://localhost:3001` works in the codespace, keep going and use the localhost links from the terminal.
 - If a port does not open, confirm `pnpm dev` is still running.
 - If local setup fails, stop and switch back to GitHub Codespaces unless a facilitator tells you otherwise.
 
@@ -96,6 +101,7 @@ Use this order for quick triage:
 2. Confirm the student accepted any pending repository invitation and no longer sees `Repository Access Issue`.
 3. Confirm the Codespace finished booting before they ran anything manually.
 4. If `pnpm dev` reports missing `tsx` or `node_modules`, run `pnpm install -r --frozen-lockfile && pnpm env:setup`, then retry.
-5. Confirm `pnpm dev` is running and ports `3001` and `3002` are forwarded.
-6. If Codespaces is unavailable, move them to the local terminal path and keep them on Lab 00.
-7. If the student is still blocked, pair them with a facilitator instead of improvising a different setup path.
+5. If `app.github.dev` looks stale, verify the service via `http://localhost:3001` or `http://localhost:3002` inside the codespace and continue.
+6. Confirm `pnpm dev` is running and ports `3001` and `3002` are forwarded.
+7. If Codespaces is unavailable, move them to the local terminal path and keep them on Lab 00.
+8. If the student is still blocked, pair them with a facilitator instead of improvising a different setup path.
