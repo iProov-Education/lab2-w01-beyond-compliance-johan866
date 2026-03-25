@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-const fs = require('node:fs/promises')
+const fs = require('node:fs')
+const fsp = require('node:fs/promises')
 const path = require('node:path')
 
 const REPO_ROOT = path.resolve(__dirname, '..')
@@ -10,6 +11,21 @@ const STARTER_OVERRIDES_ROOT = path.join(
   'instructor-repo',
   'starter-overrides'
 )
+const BUNDLED_SOLUTIONS_ROOT = path.join(REPO_ROOT, 'working-solutions')
+
+function defaultStarterOverridesRoot(repoRoot) {
+  return path.join(
+    repoRoot,
+    'learninglab-world-class-implementation-kit',
+    'overlays',
+    'instructor-repo',
+    'starter-overrides'
+  )
+}
+
+function defaultBundledSolutionsRoot(repoRoot) {
+  return path.join(repoRoot, 'working-solutions')
+}
 
 const INTEGRATED_LAB_FILES = ['issuer/src/index.ts', 'verifier/src/index.ts']
 
@@ -107,9 +123,27 @@ function parseArgs(argv) {
   return out
 }
 
+function detectRepoMode(roots = {}) {
+  const repoRoot = path.resolve(roots.repoRoot || REPO_ROOT)
+  const starterOverridesRoot = path.resolve(roots.starterOverridesRoot || defaultStarterOverridesRoot(repoRoot))
+  const bundledSolutionsRoot = path.resolve(roots.bundledSolutionsRoot || defaultBundledSolutionsRoot(repoRoot))
+
+  if (roots.repoMode === 'instructor' || roots.repoMode === 'student') return roots.repoMode
+  if (fs.existsSync(starterOverridesRoot)) return 'instructor'
+  if (fs.existsSync(path.join(bundledSolutionsRoot, 'starter'))) return 'student'
+  if (fs.existsSync(path.join(bundledSolutionsRoot, 'integrated'))) return 'student'
+  return 'instructor'
+}
+
 function resolveSourceRoot(kind, roots = {}) {
-  if (kind === 'starter') return path.resolve(roots.starterOverridesRoot || STARTER_OVERRIDES_ROOT)
-  return path.resolve(roots.repoRoot || REPO_ROOT)
+  const repoRoot = path.resolve(roots.repoRoot || REPO_ROOT)
+  const repoMode = detectRepoMode(roots)
+  if (repoMode === 'student') {
+    const bundledSolutionsRoot = path.resolve(roots.bundledSolutionsRoot || defaultBundledSolutionsRoot(repoRoot))
+    return path.join(bundledSolutionsRoot, kind)
+  }
+  if (kind === 'starter') return path.resolve(roots.starterOverridesRoot || defaultStarterOverridesRoot(repoRoot))
+  return repoRoot
 }
 
 function createFastForwardPlan(input, roots = {}) {
@@ -120,16 +154,18 @@ function createFastForwardPlan(input, roots = {}) {
   }
 
   const repoRoot = path.resolve(roots.repoRoot || REPO_ROOT)
+  const repoMode = detectRepoMode({ ...roots, repoRoot })
   const sourceRoot = resolveSourceRoot(config.source, roots)
   const targetRoot = path.resolve(input.target)
 
-  if (targetRoot === repoRoot) {
+  if (targetRoot === repoRoot && repoMode !== 'student') {
     throw new Error('Refusing to fast-forward the instructor repo itself. Point --target at a separate student repo checkout.')
   }
 
   return {
     lab,
     targetRoot,
+    repoMode,
     sourceKind: config.source,
     summary: config.summary,
     verify: config.verify,
@@ -142,7 +178,7 @@ function createFastForwardPlan(input, roots = {}) {
   }
 }
 
-async function ensureTargetRepo(targetRoot, fsApi = fs) {
+async function ensureTargetRepo(targetRoot, fsApi = fsp) {
   const manifest = path.join(targetRoot, 'package.json')
   try {
     await fsApi.access(manifest)
@@ -151,7 +187,7 @@ async function ensureTargetRepo(targetRoot, fsApi = fs) {
   }
 }
 
-async function applyFastForwardPlan(plan, options = {}, fsApi = fs) {
+async function applyFastForwardPlan(plan, options = {}, fsApi = fsp) {
   const dryRun = options.dryRun === true
 
   await ensureTargetRepo(plan.targetRoot, fsApi)
@@ -183,6 +219,9 @@ function formatPlan(plan, options = {}) {
     '- Keep pnpm dev running in one terminal and use a second terminal for curls or lab-check output.',
     '',
     'Notes:',
+    ...(plan.repoMode === 'student'
+      ? ['- This repo includes bundled working-solution snapshots, so --target . is supported here.']
+      : []),
     ...plan.extraNotes.map((note) => `- ${note}`)
   ]
 
@@ -218,8 +257,12 @@ module.exports = {
   LAB_CONFIG,
   REPO_ROOT,
   STARTER_OVERRIDES_ROOT,
+  BUNDLED_SOLUTIONS_ROOT,
+  defaultStarterOverridesRoot,
+  defaultBundledSolutionsRoot,
   normalizeLabId,
   parseArgs,
+  detectRepoMode,
   createFastForwardPlan,
   applyFastForwardPlan,
   ensureTargetRepo,

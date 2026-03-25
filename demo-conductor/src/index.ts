@@ -1,8 +1,15 @@
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import path from 'node:path'
 import express, { type Request, type Response } from 'express'
 import { OAuth2Client } from 'google-auth-library'
-import { type AuthUser, clearAuthCookie, createAuthCookie, readAuthCookie, renderLoginPage } from './auth.js'
+import {
+  type AuthUser,
+  clearAuthCookie,
+  createAuthCookie,
+  createOpenAuthUser,
+  readAuthCookie,
+  renderLoginPage
+} from './auth.js'
 import { getSharedActionOwnerKey } from './controller.js'
 import { DemoControllerRegistry } from './registry.js'
 import { STEP_DEFS, isStepId } from './steps.js'
@@ -28,7 +35,7 @@ app.use(express.static(publicDir, { index: false }))
 
 app.get('/', (req, res) => {
   if (authEnabled && !resolveUser(req)) {
-    return res.type('html').send(renderLoginPage({ googleClientId }))
+    return res.type('html').send(renderLoginPage({ googleClientId, googleEnabled: authEnabled }))
   }
   return res.sendFile(path.join(publicDir, 'index.html'))
 })
@@ -36,7 +43,7 @@ app.get('/', (req, res) => {
 app.get('/login', (req, res) => {
   if (!authEnabled) return res.redirect('/')
   if (resolveUser(req)) return res.redirect('/')
-  return res.type('html').send(renderLoginPage({ googleClientId }))
+  return res.type('html').send(renderLoginPage({ googleClientId, googleEnabled: authEnabled }))
 })
 
 app.post('/auth/google', async (req, res) => {
@@ -73,6 +80,12 @@ app.post('/auth/google', async (req, res) => {
     console.error('[demo-conductor] google auth failed', error)
     return res.status(401).json({ ok: false, error: error?.message || 'google_auth_failed' })
   }
+})
+
+app.post('/auth/open', (_req, res) => {
+  const user = createOpenAuthUser(randomUUID())
+  res.setHeader('set-cookie', createAuthCookie(user, authSecret, useSecureCookies))
+  res.json({ ok: true, user })
 })
 
 app.post('/auth/logout', (_req, res) => {
@@ -198,13 +211,7 @@ async function requireRelayController(req: Request, res: Response) {
 
 function resolveUser(req: Request): AuthUser | null {
   if (!authEnabled) {
-    return {
-      id: 'local-demo',
-      email: null,
-      name: 'Local demo',
-      picture: null,
-      mode: 'open'
-    }
+    return createOpenAuthUser('local-demo', 'Local demo')
   }
   return readAuthCookie(req.headers.cookie, authSecret)
 }

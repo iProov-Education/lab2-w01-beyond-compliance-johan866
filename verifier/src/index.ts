@@ -8,11 +8,12 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { decodeJwt, decodeProtectedHeader, importJWK, jwtVerify } from 'jose'
 import { base64ToBytes, verifyProof as verifyBbsProof } from 'bbs-lib'
 import { assertPassedIProovSession } from './iproov.js'
 import { shouldRequireIProovForBbsVerification } from './lab-compat.js'
+import { reconstructSdJwtClaims, splitPresentedSdJwt } from './sd-jwt.js'
 import { buildVpRequest } from './vp-request.js'
 import { inspectMdocCredential, looksLikeMdocDeviceResponse } from './wallet-mdoc.js'
 import { createWalletRequestSigner, signWalletRequestObject } from './wallet-request-signing.js'
@@ -21,6 +22,7 @@ import {
   createWalletSession,
   extractPresentedCredentials,
   normalizeWalletDirectPostBody,
+  pickFirstSuccessfulWalletPresentation,
   renderWalletQrSvg,
   renderWalletSessionPage,
   summarizeWalletClaims,
@@ -212,19 +214,6 @@ async function verifySdJwtPresentation(body: any) {
   return await verifySdJwtCredential(credential)
 }
 
-function hashDisclosure(disclosure: string) {
-  return createHash('sha256').update(disclosure).digest('base64url')
-}
-
-function parseDisclosure(disclosure: string): [string, string, any] {
-  const decoded = Buffer.from(disclosure, 'base64url').toString('utf8')
-  const arr = JSON.parse(decoded)
-  if (!Array.isArray(arr) || arr.length < 3) {
-    throw new Error('invalid_disclosure')
-  }
-  return arr as [string, string, any]
-}
-
 async function fetchJwks() {
   return await fetchJwksForIssuer(ISSUER_BASE_URL)
 }
@@ -312,12 +301,31 @@ async function evaluateWalletDirectPost(session: WalletRpSession, body: WalletDi
     }
   }
 
-  const result = await inspectWalletPresentation(credentials[0], {
-    expectedAudience: session.clientId,
-    expectedNonce: session.nonce
-  })
+  let selectedPresentation
+  try {
+    selectedPresentation = await pickFirstSuccessfulWalletPresentation(credentials, (credential) =>
+      inspectWalletPresentation(credential, {
+        expectedAudience: session.clientId,
+        expectedNonce: session.nonce
+      })
+    )
+  } catch (error: any) {
+    return {
+      status: 'error',
+      receivedAt,
+      error: 'invalid_vp_token',
+      errorDescription: error?.message || 'No supported presented credential found',
+      presentationSubmission: body.presentation_submission,
+      raw
+    }
+  }
+
+  const result = selectedPresentation.result
   const summarizedClaims = summarizeWalletClaims(result.claims)
   const warningParts = []
+  if (selectedPresentation.skippedErrors.length > 0) {
+    warningParts.push(`ignored ${selectedPresentation.skippedErrors.length} unsupported presented credential candidate(s)`)
+  }
   if ('warning' in result && result.warning) warningParts.push(result.warning)
   if (summarizedClaims.over21Derived !== null) warningParts.push('age_over_21 derived from PID birthdate')
 
@@ -361,11 +369,16 @@ async function inspectWalletPresentation(
         mode: 'inspected' as const
       }
     }
-    const inspected = inspectSdJwtCredential(credential)
-    return {
-      ...inspected,
-      mode: 'inspected' as const,
-      warning: error?.message || 'inspection_only'
+    try {
+      const inspected = inspectSdJwtCredential(credential)
+      return {
+        ...inspected,
+        mode: 'inspected' as const,
+        warning: error?.message || 'inspection_only'
+      }
+    } catch (inspectionError: any) {
+      const detail = [error?.message, inspectionError?.message].filter(Boolean).join(' | ')
+      throw new Error(detail || 'unsupported_wallet_credential')
     }
   }
 }
@@ -393,40 +406,26 @@ async function verifySdJwtCredential(
     verifyOptions
   )
 
-  const hashed = disclosures.map((item) => hashDisclosure(item))
-  const sdArray = (payload as any)._sd || []
-  for (const hash of hashed) {
-    if (!sdArray.includes(hash)) throw new Error('disclosure_mismatch')
-  }
+  const materialized = reconstructSdJwtClaims(payload as Record<string, unknown>, disclosures)
 
-  const claims = disclosures.reduce<Record<string, unknown>>((acc, disclosure) => {
-    const [, name, value] = parseDisclosure(disclosure)
-    acc[name] = value
-    return acc
-  }, {})
-
-  if ((payload as any).credentialStatus) {
-    await ensureNotRevoked((payload as any).credentialStatus)
+  if ((materialized.payload as any).credentialStatus) {
+    await ensureNotRevoked((materialized.payload as any).credentialStatus)
   }
 
   let keyBinding: Record<string, unknown> | null = null
   if (keyBindingJwt) {
-    keyBinding = await verifyKeyBindingJwt(keyBindingJwt, payload as Record<string, unknown>, options)
+    keyBinding = await verifyKeyBindingJwt(keyBindingJwt, materialized.payload as Record<string, unknown>, options)
   }
 
-  return { payload: payload as Record<string, unknown>, claims, keyBinding }
+  return { payload: materialized.payload as Record<string, unknown>, claims: materialized.claims, keyBinding }
 }
 
 function inspectSdJwtCredential(credential: string) {
   const { sdJwt, disclosures, keyBindingJwt } = splitPresentedSdJwt(credential)
   const payload = decodeJwt(sdJwt) as Record<string, unknown>
-  const claims = disclosures.reduce<Record<string, unknown>>((acc, disclosure) => {
-    const [, name, value] = parseDisclosure(disclosure)
-    acc[name] = value
-    return acc
-  }, {})
+  const materialized = reconstructSdJwtClaims(payload, disclosures)
   const keyBinding = keyBindingJwt ? (decodeJwt(keyBindingJwt) as Record<string, unknown>) : null
-  return { payload, claims, keyBinding }
+  return { payload: materialized.payload as Record<string, unknown>, claims: materialized.claims, keyBinding }
 }
 
 async function verifyKeyBindingJwt(
@@ -450,36 +449,6 @@ async function verifyKeyBindingJwt(
     throw new Error('kb_nonce_mismatch')
   }
   return keyBindingPayload as Record<string, unknown>
-}
-
-function splitPresentedSdJwt(credential: string) {
-  const segments = credential.split('~').filter(Boolean)
-  const [sdJwt, ...tail] = segments
-  if (!sdJwt) throw new Error('missing_sd_jwt')
-  const disclosures: string[] = []
-  let keyBindingJwt: string | null = null
-  for (const segment of tail) {
-    if (!keyBindingJwt && looksLikeJwt(segment) && !isDisclosure(segment)) {
-      keyBindingJwt = segment
-      continue
-    }
-    disclosures.push(segment)
-  }
-  if (disclosures.length === 0) throw new Error('missing_disclosures')
-  return { sdJwt, disclosures, keyBindingJwt }
-}
-
-function looksLikeJwt(value: string) {
-  return value.split('.').length === 3
-}
-
-function isDisclosure(value: string) {
-  try {
-    parseDisclosure(value)
-    return true
-  } catch {
-    return false
-  }
 }
 
 async function fetchJwksForIssuer(issuer: string) {

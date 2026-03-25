@@ -3,23 +3,13 @@ import QRCode from 'qrcode'
 
 const SESSION_TTL_MS = 15 * 60_000
 const QR_SIZE = 280
-const EUDI_PID_SD_JWT_VCTS = ['urn:eudi:pid:1']
 const EUDI_PID_MDOC_DOCTYPE = 'eu.europa.ec.eudi.pid.1'
 const EUDI_PID_MDOC_NAMESPACE = EUDI_PID_MDOC_DOCTYPE
 const X509_SAN_DNS_CLIENT_ID_SCHEME = 'x509_san_dns'
-const PID_BIRTHDATE_CLAIMS = ['birthdate', 'birth_date'] as const
-const PID_NATIONALITY_CLAIMS = ['nationalities', 'nationality'] as const
 
 type WalletClaimQuery = {
   id: string
   path: string[]
-}
-
-type SdJwtWalletCredentialQuery = {
-  id: string
-  format: 'dc+sd-jwt'
-  meta: { vct_values: string[] }
-  claims: WalletClaimQuery[]
 }
 
 type MdocWalletCredentialQuery = {
@@ -29,7 +19,7 @@ type MdocWalletCredentialQuery = {
   claims: WalletClaimQuery[]
 }
 
-type WalletCredentialQuery = SdJwtWalletCredentialQuery | MdocWalletCredentialQuery
+type WalletCredentialQuery = MdocWalletCredentialQuery
 
 export type WalletVerifierProfile = {
   baseUrl: string
@@ -97,10 +87,6 @@ export type WalletRequestObject = {
   }
   client_metadata: {
     vp_formats_supported: {
-      'dc+sd-jwt': {
-        'sd-jwt_alg_values': string[]
-        'kb-jwt_alg_values': string[]
-      }
       'mso_mdoc': Record<string, never>
     }
   }
@@ -109,6 +95,12 @@ export type WalletRequestObject = {
 export type WalletClaimSummary = {
   claims: Record<string, unknown>
   over21Derived: boolean | null
+}
+
+export type WalletPresentationSelection<T> = {
+  credential: string
+  result: T
+  skippedErrors: string[]
 }
 
 export function deriveWalletVerifierProfile(baseUrl: string): WalletVerifierProfile {
@@ -163,10 +155,6 @@ export function buildWalletRequestObject(session: WalletRpSession, walletNonce?:
     dcql_query: buildWalletDcqlQuery(),
     client_metadata: {
       vp_formats_supported: {
-        'dc+sd-jwt': {
-          'sd-jwt_alg_values': ['ES256'],
-          'kb-jwt_alg_values': ['ES256']
-        },
         'mso_mdoc': {}
       }
     },
@@ -175,18 +163,6 @@ export function buildWalletRequestObject(session: WalletRpSession, walletNonce?:
 }
 
 export function buildWalletDcqlQuery() {
-  const pidBirthdateVariants: SdJwtWalletCredentialQuery[] = PID_BIRTHDATE_CLAIMS.flatMap((birthdateClaim) =>
-    PID_NATIONALITY_CLAIMS.map((nationalityClaim) => ({
-      id: `pid-${birthdateClaim}-and-${nationalityClaim}`,
-      format: 'dc+sd-jwt' as const,
-      meta: { vct_values: EUDI_PID_SD_JWT_VCTS },
-      claims: [
-        { id: birthdateClaim, path: [birthdateClaim] },
-        { id: nationalityClaim, path: [nationalityClaim] }
-      ]
-    }))
-  )
-
   const pidMdocVariants: WalletCredentialQuery[] = [
     {
       id: 'pid-mdoc-age-over-21-and-nationality',
@@ -209,28 +185,14 @@ export function buildWalletDcqlQuery() {
   ]
 
   return {
-    credentials: [
-      {
-        id: 'pid-age-over-21-and-nationality',
-        format: 'dc+sd-jwt' as const,
-        meta: { vct_values: EUDI_PID_SD_JWT_VCTS },
-        claims: [
-          { id: 'age_over_21', path: ['age_over_21'] },
-          { id: 'nationality', path: ['nationality'] }
-        ]
-      },
-      ...pidBirthdateVariants,
-      ...pidMdocVariants
-    ],
+    credentials: pidMdocVariants,
     credential_sets: [
       {
         options: [
-          ['pid-age-over-21-and-nationality'],
-          ...pidBirthdateVariants.map((credential) => [credential.id]),
           ...pidMdocVariants.map((credential) => [credential.id])
         ],
         purpose:
-          'Accept either a PID SD-JWT VC or a PID mdoc. If the credential exposes birth date instead of age_over_21, the verifier derives the over-21 decision locally.'
+          'Use the PID mdoc path for the public wallet demo. If the credential exposes birth_date instead of age_over_21, the verifier derives the over-21 decision locally.'
       }
     ]
   }
@@ -301,9 +263,27 @@ export function extractPresentedCredentials(vpToken: unknown): string[] {
   return []
 }
 
+export async function pickFirstSuccessfulWalletPresentation<T>(
+  credentials: string[],
+  inspect: (credential: string) => Promise<T>
+): Promise<WalletPresentationSelection<T>> {
+  const skippedErrors: string[] = []
+  for (const credential of credentials) {
+    try {
+      return {
+        credential,
+        result: await inspect(credential),
+        skippedErrors
+      }
+    } catch (error: any) {
+      skippedErrors.push(error?.message || 'wallet_presentation_inspection_failed')
+    }
+  }
+  throw new Error(skippedErrors[0] || 'wallet_presentation_inspection_failed')
+}
+
 export function renderWalletSessionPage(session: WalletRpSession, qrSvg: string) {
   const requestedClaims = [
-    'PID (SD-JWT VC): age_over_21 + nationality, or birthdate/birth_date + nationality/nationalities',
     'PID (MSO mdoc): age_over_21 + nationality, or birth_date + nationality under the PID namespace'
   ]
   const statusCopy =
@@ -314,6 +294,59 @@ export function renderWalletSessionPage(session: WalletRpSession, qrSvg: string)
         : session.outcome.mode === 'verified'
           ? 'Presentation received and cryptographically verified.'
           : 'Presentation received and parsed, but only structural inspection was possible.'
+  const heroTone =
+    session.outcome.status === 'complete'
+      ? 'success'
+      : session.outcome.status === 'error'
+        ? 'error'
+        : 'pending'
+  const heroTitle =
+    session.outcome.status === 'complete'
+      ? 'Successful Authentication'
+      : session.outcome.status === 'error'
+        ? 'Authentication Failed'
+        : 'Scan This QR Code With The Wallet'
+  const heroLead =
+    session.outcome.status === 'complete'
+      ? 'The wallet presentation was received and the requested PID claims were accepted.'
+      : statusCopy
+  const completedSummary = session.outcome.status === 'complete' ? renderCompletedWalletOutcome(session) : ''
+  const technicalDetails = renderWalletTechnicalDetails(session)
+  const pendingCards = session.outcome.status === 'complete'
+    ? ''
+    : `
+    <section class="grid">
+      <article class="card">
+        <h2>Scan</h2>
+        <div class="qr">${qrSvg}</div>
+        <p><a href="${escapeHtml(session.deepLink)}">Open the wallet deep link directly</a></p>
+        <p><strong>Request URI:</strong><br /><code>${escapeHtml(session.requestUri)}</code></p>
+        <p><strong>Response URI:</strong><br /><code>${escapeHtml(session.responseUri)}</code></p>
+      </article>
+      <article class="card">
+        <h2>Verifier Setup</h2>
+        <p>If your wallet fork uses preregistered verifier settings, use these values:</p>
+        <ul>
+          <li><strong>Client ID:</strong> <code>${escapeHtml(session.clientId)}</code></li>
+          <li><strong>Verifier API:</strong> <code>${escapeHtml(session.verifierApi)}</code></li>
+          <li><strong>Legal Name:</strong> <code>${escapeHtml(session.legalName)}</code></li>
+        </ul>
+        <p><strong>Requested claims:</strong></p>
+        <ul>${requestedClaims.map((claim) => `<li>${escapeHtml(claim)}</li>`).join('')}</ul>
+      </article>
+      <article class="card">
+        <h2>Session</h2>
+        <p><strong>Session ID:</strong> <code>${escapeHtml(session.id)}</code></p>
+        <p><strong>State:</strong> <code>${escapeHtml(session.state)}</code></p>
+        <p><strong>Nonce:</strong> <code>${escapeHtml(session.nonce)}</code></p>
+        <p><strong>Created:</strong> <code>${escapeHtml(session.createdAt)}</code></p>
+        <p><strong>Expires:</strong> <code>${escapeHtml(session.expiresAt)}</code></p>
+      </article>
+      <article class="card">
+        <h2>Latest Result</h2>
+        <pre>${escapeHtml(JSON.stringify(session.outcome, null, 2))}</pre>
+      </article>
+    </section>`
 
   const autoRefresh =
     session.outcome.status === 'pending'
@@ -364,9 +397,75 @@ export function renderWalletSessionPage(session: WalletRpSession, qrSvg: string)
       border-radius: 20px;
       box-shadow: 0 12px 30px rgba(23,33,43,0.07);
     }
+    .hero.pending {
+      border-color: var(--line);
+    }
+    .hero.success {
+      border-color: rgba(45, 125, 74, 0.25);
+      background: linear-gradient(160deg, rgba(246, 255, 248, 0.96), rgba(231, 247, 236, 0.96));
+    }
+    .hero.error {
+      border-color: rgba(172, 53, 69, 0.18);
+      background: linear-gradient(160deg, rgba(255, 248, 249, 0.96), rgba(255, 237, 240, 0.96));
+    }
     .hero {
       padding: 1.5rem;
       margin-bottom: 1rem;
+    }
+    .hero-lead {
+      font-size: 1.15rem;
+      max-width: 58rem;
+      margin-bottom: 0.9rem;
+    }
+    .summary-grid {
+      display: grid;
+      gap: 0.85rem;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 1rem;
+    }
+    .summary-card {
+      background: rgba(255,255,255,0.82);
+      border: 1px solid rgba(32, 63, 91, 0.1);
+      border-radius: 16px;
+      padding: 1rem;
+    }
+    .summary-label {
+      display: block;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #5a6c80;
+      margin-bottom: 0.35rem;
+      font-weight: 700;
+    }
+    .summary-value {
+      display: block;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #142434;
+      line-height: 1.3;
+    }
+    .summary-note {
+      display: block;
+      margin-top: 0.35rem;
+      color: #4c5d70;
+      font-size: 0.92rem;
+    }
+    .technical {
+      margin-top: 1rem;
+    }
+    details {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.8);
+      padding: 0.8rem 1rem;
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 700;
+    }
+    details > *:not(summary) {
+      margin-top: 0.85rem;
     }
     .grid {
       display: grid;
@@ -416,44 +515,15 @@ export function renderWalletSessionPage(session: WalletRpSession, qrSvg: string)
 </head>
 <body>
   <main>
-    <section class="hero">
+    <section class="hero ${heroTone}">
       <span class="pill">Wallet RP Session</span>
-      <h1>Scan This QR Code With The Wallet</h1>
-      <p>${escapeHtml(statusCopy)}</p>
-      <p>This verifier accepts either a PID SD-JWT VC or a PID mdoc and asks for proof that the holder is over 21 plus nationality. If the credential exposes birth date instead of <code>age_over_21</code>, the verifier derives the over-21 result locally after receiving the presentation.</p>
+      <h1>${escapeHtml(heroTitle)}</h1>
+      <p class="hero-lead">${escapeHtml(heroLead)}</p>
+      <p>This verifier asks for proof that the holder is over 21 plus nationality from a PID mdoc. If the credential exposes <code>birth_date</code> instead of <code>age_over_21</code>, the verifier derives the over-21 result locally after receiving the presentation.</p>
+      ${completedSummary}
     </section>
-    <section class="grid">
-      <article class="card">
-        <h2>Scan</h2>
-        <div class="qr">${qrSvg}</div>
-        <p><a href="${escapeHtml(session.deepLink)}">Open the wallet deep link directly</a></p>
-        <p><strong>Request URI:</strong><br /><code>${escapeHtml(session.requestUri)}</code></p>
-        <p><strong>Response URI:</strong><br /><code>${escapeHtml(session.responseUri)}</code></p>
-      </article>
-      <article class="card">
-        <h2>Verifier Setup</h2>
-        <p>If your wallet fork uses preregistered verifier settings, use these values:</p>
-        <ul>
-          <li><strong>Client ID:</strong> <code>${escapeHtml(session.clientId)}</code></li>
-          <li><strong>Verifier API:</strong> <code>${escapeHtml(session.verifierApi)}</code></li>
-          <li><strong>Legal Name:</strong> <code>${escapeHtml(session.legalName)}</code></li>
-        </ul>
-        <p><strong>Requested claims:</strong></p>
-        <ul>${requestedClaims.map((claim) => `<li>${escapeHtml(claim)}</li>`).join('')}</ul>
-      </article>
-      <article class="card">
-        <h2>Session</h2>
-        <p><strong>Session ID:</strong> <code>${escapeHtml(session.id)}</code></p>
-        <p><strong>State:</strong> <code>${escapeHtml(session.state)}</code></p>
-        <p><strong>Nonce:</strong> <code>${escapeHtml(session.nonce)}</code></p>
-        <p><strong>Created:</strong> <code>${escapeHtml(session.createdAt)}</code></p>
-        <p><strong>Expires:</strong> <code>${escapeHtml(session.expiresAt)}</code></p>
-      </article>
-      <article class="card">
-        <h2>Latest Result</h2>
-        <pre>${escapeHtml(JSON.stringify(session.outcome, null, 2))}</pre>
-      </article>
-    </section>
+    ${pendingCards}
+    ${technicalDetails}
   </main>
 </body>
 </html>`
@@ -484,6 +554,113 @@ function escapeHtml(value: string) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+function renderCompletedWalletOutcome(session: WalletRpSession) {
+  const claims = session.outcome.claims ?? {}
+  const birthdate = normalizeBirthdateClaim(claims.birthdate ?? claims.birth_date)
+  const ageOver21 = normalizeBooleanClaim(claims.age_over_21)
+  const nationalities = normalizeNationalityClaim(claims.nationalities ?? claims.nationality)
+  const credentialLabel = formatCredentialLabel(session.outcome.vct)
+  const disclosureNote =
+    claims.age_over_21_source === 'derived_from_birthdate'
+      ? 'Derived locally from the disclosed birth date.'
+      : session.outcome.mode === 'verified'
+        ? 'Cryptographically verified from the presentation.'
+        : 'Accepted from the wallet presentation.'
+
+  const cards = [
+    {
+      label: 'Result',
+      value: 'Successful authentication',
+      note: session.outcome.mode === 'verified' ? 'Presentation verified.' : 'Presentation inspected successfully.'
+    },
+    {
+      label: 'Credential',
+      value: credentialLabel,
+      note: 'PID document presented from the wallet.'
+    },
+    ageOver21 === null
+      ? null
+      : {
+          label: 'Over 21',
+          value: ageOver21 ? 'Yes' : 'No',
+          note: disclosureNote
+        },
+    nationalities.length === 0
+      ? null
+      : {
+          label: nationalities.length > 1 ? 'Nationalities' : 'Nationality',
+          value: nationalities.map((code) => formatNationality(code)).join(', '),
+          note: 'Shared from the PID presentation.'
+        },
+    birthdate
+      ? {
+          label: 'Birth date',
+          value: birthdate,
+          note: 'Used for the local over-21 decision.'
+        }
+      : null
+  ].filter((card): card is { label: string; value: string; note: string } => Boolean(card))
+
+  return `
+    <div class="summary-grid">
+      ${cards
+        .map(
+          (card) => `
+            <article class="summary-card">
+              <span class="summary-label">${escapeHtml(card.label)}</span>
+              <span class="summary-value">${escapeHtml(card.value)}</span>
+              <span class="summary-note">${escapeHtml(card.note)}</span>
+            </article>
+          `
+        )
+        .join('')}
+    </div>
+  `
+}
+
+function renderWalletTechnicalDetails(session: WalletRpSession) {
+  const detailSummary =
+    session.outcome.status === 'complete'
+      ? 'Technical details'
+      : session.outcome.status === 'error'
+        ? 'Error details'
+        : 'Session details'
+  return `
+    <section class="technical">
+      <details>
+        <summary>${escapeHtml(detailSummary)}</summary>
+        <p><strong>Session ID:</strong> <code>${escapeHtml(session.id)}</code></p>
+        <p><strong>State:</strong> <code>${escapeHtml(session.state)}</code></p>
+        <p><strong>Nonce:</strong> <code>${escapeHtml(session.nonce)}</code></p>
+        <p><strong>Created:</strong> <code>${escapeHtml(session.createdAt)}</code></p>
+        <p><strong>Expires:</strong> <code>${escapeHtml(session.expiresAt)}</code></p>
+        <p><strong>Request URI:</strong><br /><code>${escapeHtml(session.requestUri)}</code></p>
+        <p><strong>Response URI:</strong><br /><code>${escapeHtml(session.responseUri)}</code></p>
+        <pre>${escapeHtml(JSON.stringify(session.outcome, null, 2))}</pre>
+      </details>
+    </section>
+  `
+}
+
+function formatCredentialLabel(value: unknown) {
+  if (value === 'eu.europa.ec.eudi.pid.1') return 'EU PID (MSO mdoc)'
+  if (typeof value === 'string' && value.trim().length > 0) return value.trim()
+  return 'Wallet credential'
+}
+
+function formatNationality(value: string) {
+  const code = value.trim().toUpperCase()
+  if (!code) return value
+  try {
+    const regionNames = new Intl.DisplayNames(['en'], { type: 'region' })
+    const label = regionNames.of(code)
+    if (label && label !== code) return `${label} (${code})`
+  } catch {
+    // Fall back to the raw code if ICU data is unavailable.
+  }
+  return code
 }
 
 function normalizeNationalityClaim(value: unknown) {

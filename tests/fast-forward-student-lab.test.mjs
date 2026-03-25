@@ -43,10 +43,36 @@ test('createFastForwardPlan uses starter overrides for Lab 00 and integrated fil
   assert.equal(lab00.sourceKind, 'starter')
   assert.equal(lab00.copies[0].source, path.join(starterRoot, 'issuer/src/index.ts'))
   assert.equal(lab02.sourceKind, 'integrated')
+  assert.equal(lab02.repoMode, 'instructor')
   assert.deepEqual(
     lab02.copies.map((copy) => copy.relPath),
     ['issuer/src/index.ts', 'verifier/src/index.ts', 'bbs-lib/src/index.ts']
   )
+})
+
+test('createFastForwardPlan allows self-target in student repos and uses bundled snapshots', async () => {
+  const repoRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'fast-forward-student-root-'))
+  const bundledRoot = path.join(repoRoot, 'working-solutions')
+
+  try {
+    await writeFixture(repoRoot, 'package.json', '{"name":"student"}\n')
+    await writeFixture(bundledRoot, 'integrated/issuer/src/index.ts', 'integrated issuer\n')
+    await writeFixture(bundledRoot, 'integrated/verifier/src/index.ts', 'integrated verifier\n')
+    await writeFixture(bundledRoot, 'integrated/bbs-lib/src/index.ts', 'integrated bbs\n')
+    await writeFixture(bundledRoot, 'starter/issuer/src/index.ts', 'starter issuer\n')
+    await writeFixture(bundledRoot, 'starter/verifier/src/index.ts', 'starter verifier\n')
+
+    const plan = api.createFastForwardPlan(
+      { lab: '02', target: repoRoot },
+      { repoRoot, bundledSolutionsRoot: bundledRoot }
+    )
+
+    assert.equal(plan.repoMode, 'student')
+    assert.equal(plan.targetRoot, repoRoot)
+    assert.equal(plan.copies[0].source, path.join(bundledRoot, 'integrated/issuer/src/index.ts'))
+  } finally {
+    await fsp.rm(repoRoot, { recursive: true, force: true })
+  }
 })
 
 test('applyFastForwardPlan copies the planned files into the target repo', async () => {
@@ -76,6 +102,36 @@ test('applyFastForwardPlan copies the planned files into the target repo', async
     await fsp.rm(repoRoot, { recursive: true, force: true })
     await fsp.rm(starterRoot, { recursive: true, force: true })
     await fsp.rm(targetRoot, { recursive: true, force: true })
+  }
+})
+
+test('applyFastForwardPlan can restore bundled working files into the current student repo', async () => {
+  const repoRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'fast-forward-self-root-'))
+  const bundledRoot = path.join(repoRoot, 'working-solutions')
+
+  try {
+    await writeFixture(repoRoot, 'package.json', '{"name":"student"}\n')
+    await writeFixture(repoRoot, 'issuer/src/index.ts', 'broken issuer\n')
+    await writeFixture(repoRoot, 'verifier/src/index.ts', 'broken verifier\n')
+    await writeFixture(repoRoot, 'bbs-lib/src/index.ts', 'broken bbs\n')
+    await writeFixture(bundledRoot, 'integrated/issuer/src/index.ts', 'integrated issuer\n')
+    await writeFixture(bundledRoot, 'integrated/verifier/src/index.ts', 'integrated verifier\n')
+    await writeFixture(bundledRoot, 'integrated/bbs-lib/src/index.ts', 'integrated bbs\n')
+    await writeFixture(bundledRoot, 'starter/issuer/src/index.ts', 'starter issuer\n')
+    await writeFixture(bundledRoot, 'starter/verifier/src/index.ts', 'starter verifier\n')
+
+    const plan = api.createFastForwardPlan(
+      { lab: '02', target: repoRoot },
+      { repoRoot, bundledSolutionsRoot: bundledRoot }
+    )
+
+    await api.applyFastForwardPlan(plan, {}, fsp)
+
+    assert.equal(await fsp.readFile(path.join(repoRoot, 'issuer/src/index.ts'), 'utf8'), 'integrated issuer\n')
+    assert.equal(await fsp.readFile(path.join(repoRoot, 'verifier/src/index.ts'), 'utf8'), 'integrated verifier\n')
+    assert.equal(await fsp.readFile(path.join(repoRoot, 'bbs-lib/src/index.ts'), 'utf8'), 'integrated bbs\n')
+  } finally {
+    await fsp.rm(repoRoot, { recursive: true, force: true })
   }
 })
 

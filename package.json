@@ -7,7 +7,7 @@
   "scripts": {
     "preinstall": "node scripts/check-node-version.js",
     "build": "pnpm -r build",
-    "dev": "pnpm -r --parallel --filter issuer --filter verifier dev",
+    "dev": "pnpm --filter bbs-lib build && pnpm -r --parallel --filter issuer --filter verifier dev",
     "demo:conductor": "pnpm --filter demo-conductor dev",
     "demo:up": "node scripts/run-demo-conductor.js",
     "demo:docker": "node scripts/run-demo-conductor.js --docker",

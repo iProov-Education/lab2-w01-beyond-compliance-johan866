@@ -27,6 +27,16 @@ export function clearAuthCookie(secure: boolean) {
   })
 }
 
+export function createOpenAuthUser(id: string, name = 'Open demo session'): AuthUser {
+  return {
+    id,
+    email: null,
+    name,
+    picture: null,
+    mode: 'open'
+  }
+}
+
 export function readAuthCookie(cookieHeader: string | undefined, secret: string): AuthUser | null {
   const cookies = parseCookies(cookieHeader)
   const value = cookies[AUTH_COOKIE_NAME]
@@ -51,7 +61,38 @@ export function readAuthCookie(cookieHeader: string | undefined, secret: string)
   }
 }
 
-export function renderLoginPage({ googleClientId }: { googleClientId: string }) {
+export function renderLoginPage({
+  googleClientId,
+  googleEnabled
+}: {
+  googleClientId: string
+  googleEnabled: boolean
+}) {
+  const googleSigninMarkup = googleEnabled
+    ? `
+      <p class="login-copy">Google sign-in keeps sessions separate, but it is optional for this demo.</p>
+      <div id="google-signin"></div>
+      <p class="divider"><span>or</span></p>
+    `
+    : `
+      <p class="login-copy">Google sign-in is unavailable right now. Continue with an open demo session instead.</p>
+    `
+  const googleScript = googleEnabled
+    ? '<script src="https://accounts.google.com/gsi/client" async defer></script>'
+    : ''
+  const googleWindowLoad = googleEnabled
+    ? `
+      google.accounts.id.initialize({
+        client_id: ${JSON.stringify(googleClientId)},
+        callback: handleCredentialResponse
+      })
+      google.accounts.id.renderButton(
+        document.getElementById('google-signin'),
+        { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill' }
+      )
+      google.accounts.id.prompt()
+    `
+    : ''
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -144,11 +185,52 @@ export function renderLoginPage({ googleClientId }: { googleClientId: string }) 
       }
 
       .login-copy {
-        margin-bottom: 22px;
+        margin-bottom: 18px;
       }
 
       #google-signin {
         min-height: 44px;
+      }
+
+      .secondary-copy {
+        margin: 0 0 16px;
+      }
+
+      .open-button {
+        width: 100%;
+        border: 0;
+        border-radius: 999px;
+        padding: 14px 20px;
+        background: linear-gradient(135deg, var(--gold) 0%, var(--orange) 100%);
+        color: #05263a;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 12px 28px rgba(255, 131, 0, 0.24);
+      }
+
+      .open-button:hover {
+        filter: brightness(1.03);
+      }
+
+      .divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 18px 0;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 0.78rem;
+        font-weight: 700;
+      }
+
+      .divider::before,
+      .divider::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--line);
       }
 
       #login-error {
@@ -157,7 +239,7 @@ export function renderLoginPage({ googleClientId }: { googleClientId: string }) 
         font-weight: 600;
       }
     </style>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    ${googleScript}
   </head>
   <body>
     <main>
@@ -167,8 +249,9 @@ export function renderLoginPage({ googleClientId }: { googleClientId: string }) 
         <h1>Sign in to start the experience</h1>
         <p>Follow each step with your own session, from credential issuance to iProov liveness and selective disclosure.</p>
       </section>
-      <p class="login-copy">Google sign-in gives you a personal session so your credentials, proofs, and progress stay separate during the demo.</p>
-      <div id="google-signin"></div>
+      ${googleSigninMarkup}
+      <p class="secondary-copy">If Google blocks the sign-in flow, continue with an open demo session instead.</p>
+      <button id="open-login" class="open-button" type="button">Continue without Google</button>
       <p id="login-error" role="status" aria-live="polite"></p>
     </main>
     <script>
@@ -192,16 +275,25 @@ export function renderLoginPage({ googleClientId }: { googleClientId: string }) 
         }
       }
 
+      async function continueWithoutGoogle() {
+        const errorNode = document.getElementById('login-error')
+        errorNode.textContent = ''
+        try {
+          const login = await fetch('/auth/open', { method: 'POST' })
+          const payload = await login.json()
+          if (!login.ok) {
+            errorNode.textContent = payload.error || 'Open login failed.'
+            return
+          }
+          window.location.href = '/'
+        } catch (error) {
+          errorNode.textContent = error?.message || 'Open login failed.'
+        }
+      }
+
       window.onload = () => {
-        google.accounts.id.initialize({
-          client_id: ${JSON.stringify(googleClientId)},
-          callback: handleCredentialResponse
-        })
-        google.accounts.id.renderButton(
-          document.getElementById('google-signin'),
-          { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill' }
-        )
-        google.accounts.id.prompt()
+        document.getElementById('open-login').addEventListener('click', continueWithoutGoogle)
+        ${googleWindowLoad}
       }
     </script>
   </body>
